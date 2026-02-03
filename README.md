@@ -1,7 +1,5 @@
 # commercial-vacancy
 
-## testing
-
 
 # Project Scope
 ## Overview
@@ -70,3 +68,21 @@ The following features are explicitly excluded from the current project scope to
 * Core workflows function correctly end-to-end
 * Data is stored and retrieved securely from the database
 * The application is stable, usable, and well-documented
+
+## Data Flow
+
+### Property Search
+1. User searches for available properties
+1. Platform retrieves listings from property database
+1. Nearby services and transit data retrieved from APIs
+1. Results displayed to user
+
+### Property Listing
+1. Landlord submits property listing
+1. Listing is validated and stored in database
+1. Confirmation returned to landlord
+
+### Order & Payment Processing
+1. Renter submits payment information
+1. Payment system processes transaction
+1. Order confirmation returned to renter and landlord

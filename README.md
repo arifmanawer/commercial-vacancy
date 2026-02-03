@@ -52,12 +52,6 @@ The primary goal of the project is to create a functional and realistic Minimum 
 * Email notifications for status updates
 * Integration of city or public data for property information
 
-## Out of Scope
-The following features are explicitly excluded from the current project scope to ensure feasibility of our MVP:
-* Real-time chat or messaging
-* Mobile application development
-* Advanced analytics or AI-driven recommendations
-
 ## Assumptions and Constraints
 * The system will be developed as a web application
 * Users access the platform through a modern web browser
@@ -86,3 +80,27 @@ The following features are explicitly excluded from the current project scope to
 1. Renter submits payment information
 1. Payment system processes transaction
 1. Order confirmation returned to renter and landlord
+
+## Tech Stack
+
+### Frontend
+* Next.js
+* React.js
+* Tailwind CSS
+
+### Backend
+* Laravel
+* Node.js
+* Express.js
+
+### Database
+* Supabase - PostgreSQL
+
+### Data Sources
+* NYC Open Data
+* Google Maps API
+* Location Insights API
+
+### Deployment
+*  Vercel
+*  Render

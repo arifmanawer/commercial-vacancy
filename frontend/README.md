@@ -2,19 +2,31 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+Make sure you have Node.js installed. Then install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Starting the Development Server
+
+To start the Next.js frontend development server, navigate to the `frontend` directory and run:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Or from the project root:
+
+```bash
+npm run dev --prefix frontend
+```
+
+The development server will start on [http://localhost:3000](http://localhost:3000) (or the next available port if 3000 is in use).
+
+Open your browser to see the result. The page auto-updates as you edit files.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

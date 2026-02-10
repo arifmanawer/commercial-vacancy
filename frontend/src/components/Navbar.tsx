@@ -36,6 +36,12 @@ export default function Navbar() {
             >
               About
             </Link>
+            <Link
+              href="/map"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              Map
+            </Link>
           </div>
         </div>
 

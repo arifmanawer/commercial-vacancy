@@ -1,5 +1,27 @@
 # commercial-vacancy
 
+## Running with Docker
+
+Run the entire application (frontend + backend) with a single command. Requires only **Docker** and **Git**—no Node.js or npm needed.
+
+### Start the application
+
+```bash
+docker compose up --build
+```
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:5000
+
+### Stop the application
+
+```bash
+docker compose down
+```
+
+Hot reload is enabled for both services—edit the code and changes will apply automatically.
+
+---
 
 # Project Scope
 ## Overview

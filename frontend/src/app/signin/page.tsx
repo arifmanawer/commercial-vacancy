@@ -2,10 +2,16 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
+import { supabase } from "../../lib/supabaseClient";
+import { logAuthEvent } from "../../lib/authLogger";
 
 export default function SignInPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/dashboard/renter";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,10 +22,19 @@ export default function SignInPage() {
     setError("");
     setLoading(true);
     try {
-      // TODO: Implement auth call
-      await new Promise((r) => setTimeout(r, 700));
-      console.log("Sign in", { email });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        logAuthEvent("signin", email, false, authError.message);
+        setError(authError.message ?? "Sign in failed. Please try again.");
+        return;
+      }
+      if (data.session) {
+        logAuthEvent("signin", email, true);
+        router.push(redirectTo);
+        router.refresh();
+      }
     } catch (err) {
+      logAuthEvent("signin", email, false, String(err));
       setError("Sign in failed. Please try again.");
     } finally {
       setLoading(false);

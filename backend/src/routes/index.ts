@@ -1,9 +1,11 @@
 import { Router } from 'express';
+import userRoutes from './users';
+import authEventsRoutes from './authEvents';
 
 const router = Router();
 
-// Mount route modules here
-// Example: router.use('/users', userRoutes);
+router.use('/users', userRoutes);
+router.use('/auth-events', authEventsRoutes);
 
 // Default API info route
 router.get('/', (_req, res) => {

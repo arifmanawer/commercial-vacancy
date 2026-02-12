@@ -3,8 +3,7 @@ import { cookies } from "next/headers";
 
 /**
  * Supabase client for Server Components and Server Actions.
- * Uses cookies to persist session - required for App Router server-side auth.
- * Do NOT use in Client Components; use supabaseClient.ts instead.
+
  */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();

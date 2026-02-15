@@ -16,9 +16,38 @@ export default function AboutPage() {
           ← Back to home
         </Link>
         <h1 className="text-3xl font-bold text-slate-900">About</h1>
-        <p className="mt-2 text-slate-600">
-          Commercial Vacancy helps connect renters, landlords, and contractors for NYC commercial spaces. More about us coming soon.
+        <p className="mt-2 text-slate-600 max-w-2xl">
+          We help put vacant commercial space to work—connecting renters with
+          spaces, landlords with tenants, and contractors with maintenance jobs
+          so NYC buildings stay active and well maintained.
         </p>
+
+        <section className="mt-12" aria-labelledby="story-heading">
+          <h2
+            id="story-heading"
+            className="text-lg font-semibold text-slate-900 mb-2"
+          >
+            Our story
+          </h2>
+          <p className="text-slate-600">
+            Commercial Vacancy started from a simple idea: make it easier to
+            find, list, and maintain commercial space. More details coming
+            soon.
+          </p>
+        </section>
+
+        <section className="mt-10" aria-labelledby="contact-heading">
+          <h2
+            id="contact-heading"
+            className="text-lg font-semibold text-slate-900 mb-2"
+          >
+            Contact
+          </h2>
+          <p className="text-slate-600">
+            Have questions or feedback? Reach out—we&apos;ll add contact details
+            here soon.
+          </p>
+        </section>
       </main>
       <Footer />
     </div>

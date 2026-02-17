@@ -1,11 +1,34 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { fetchCurrentUserFromApi } from "@/lib/supabaseClient";
+
 export default function DashboardProfile() {
-  // Placeholder data — replace with real user/session data when auth is wired
-  const profile = {
-    name: "Alex Johnson",
-    email: "alex.johnson@example.com",
-    phone: "+1 (555) 123-4567",
-    memberSince: "January 2025",
-  };
+  const [user, setUser] = useState<{
+    id: string;
+    email?: string;
+    created_at?: string;
+    user_metadata?: { full_name?: string };
+  } | null>(null);
+
+  useEffect(() => {
+    fetchCurrentUserFromApi().then(setUser);
+  }, []);
+
+  if (!user) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-5 animate-pulse">
+        <div className="h-14 w-14 rounded-full bg-slate-100" />
+        <div className="mt-4 h-5 w-32 bg-slate-100 rounded" />
+        <div className="mt-2 h-4 w-48 bg-slate-100 rounded" />
+      </section>
+    );
+  }
+
+  const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
+  const memberSince = user.created_at
+    ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "—";
 
   return (
     <section
@@ -17,24 +40,20 @@ export default function DashboardProfile() {
       </h2>
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-500 text-lg font-semibold">
-          {profile.name
+          {name
             .split(" ")
             .map((n) => n[0])
-            .join("")}
+            .join("")
+            .slice(0, 2)
+            .toUpperCase()}
         </div>
         <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-lg font-semibold text-slate-900 truncate">
-            {profile.name}
-          </p>
-          <p className="text-sm text-slate-600 truncate">{profile.email}</p>
+          <p className="text-lg font-semibold text-slate-900 truncate">{name}</p>
+          <p className="text-sm text-slate-600 truncate">{user.email}</p>
           <dl className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500 mt-2">
             <div>
-              <span className="sr-only">Phone</span>
-              <span>{profile.phone}</span>
-            </div>
-            <div>
               <span className="sr-only">Member since</span>
-              <span>Member since {profile.memberSince}</span>
+              <span>Member since {memberSince}</span>
             </div>
           </dl>
         </div>

@@ -4,6 +4,8 @@
 
 Run the entire application (frontend + backend) with a single command. Requires only **Docker** and **Git**—no Node.js or npm needed.
 
+**Supabase:** Copy `.env.example` to `.env` and add your Supabase URL, anon key, and service role key. Never commit `.env`. Run the SQL migration in Supabase Dashboard → SQL Editor: `supabase/migrations/001_profiles.sql` (creates profiles table, trigger, RLS).
+
 ### Start the application
 
 ```bash
@@ -20,6 +22,42 @@ docker compose down
 ```
 
 Hot reload is enabled for both services—edit the code and changes will apply automatically.
+
+## Local development (without Docker)
+
+1. Copy `.env.example` to `.env` at the repo root and add your Supabase keys.
+2. For the frontend to load `.env`, create a symlink:
+   ```bash
+   ln -sf ../.env frontend/.env
+   ```
+3. Kill any existing Next.js process if you get port/lock errors:
+   ```bash
+   pkill -f "next dev"
+   rm -f frontend/.next/dev/lock
+   ```
+4. Start backend: `cd backend && npm run dev`
+5. Start frontend: `cd frontend && npm run dev`
+
+## Troubleshooting: Next.js stuck on "Starting"
+
+| Cause | Fix |
+|-------|-----|
+| **Corrupted `.next` cache** | `rm -rf frontend/.next` then `npm run dev` |
+| **Port 3000 in use** | `npm run dev -- -p 3001` (or any free port) |
+| **Stale lock / other instance** | `pkill -f "next dev"` and `rm -f frontend/.next/dev/lock` |
+| **Corrupted dependencies** | `rm -rf frontend/node_modules frontend/package-lock.json` then `npm install` |
+| **Turbopack hang** | Dev script uses `--webpack` as fallback. If still stuck, ensure `package.json` has `"dev": "next dev --webpack"` |
+| **Code errors / infinite loops** | Check terminal for errors; inspect `loading.tsx`, data fetching, or server components |
+| **Low memory** | Close other apps; Node needs ~1–2GB during build |
+
+**Quick reset (frontend):**
+```bash
+cd frontend
+pkill -f "next dev" 2>/dev/null
+rm -rf .next node_modules package-lock.json
+npm install
+npm run dev
+```
 
 ---
 

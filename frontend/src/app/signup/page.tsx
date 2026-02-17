@@ -2,10 +2,14 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
+import { supabase } from "../../lib/supabaseClient";
+import { logAuthEvent } from "../../lib/authLogger";
 
 export default function SignUpPage() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,16 +22,30 @@ export default function SignUpPage() {
     setError("");
 
     if (password !== confirmPassword) {
+      logAuthEvent("signup", email, false, "Passwords do not match");
       setError("Passwords do not match.");
       return;
     }
 
     setLoading(true);
     try {
-      // TODO: Implement signup API
-      await new Promise((r) => setTimeout(r, 800));
-      console.log("Sign up", { name, email });
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name } },
+      });
+      if (authError) {
+        logAuthEvent("signup", email, false, authError.message);
+        setError(authError.message ?? "Sign up failed. Please try again.");
+        return;
+      }
+      if (data.user) {
+        logAuthEvent("signup", email, true);
+        router.push("/dashboard/renter");
+        router.refresh();
+      }
     } catch (err) {
+      logAuthEvent("signup", email, false, String(err));
       setError("Sign up failed. Please try again.");
     } finally {
       setLoading(false);

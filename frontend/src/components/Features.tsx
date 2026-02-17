@@ -15,19 +15,18 @@ export default function Features() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
       {items.map((item) => (
         <div
           key={item.title}
-          className="flex gap-4 items-start p-4 border border-slate-200 rounded-md"
+          className="flex gap-4 items-start p-5 sm:p-6 bg-white border border-slate-200/70 rounded-xl sm:rounded-2xl shadow-sm hover:shadow-md hover:border-[var(--brand)]/20 transition-all duration-200"
         >
-          <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
-            <span className="text-slate-400 text-xs">●</span>
+          <div className="w-11 h-11 rounded-xl bg-[var(--brand-muted)] flex items-center justify-center flex-shrink-0">
+            <span className="text-[var(--brand)] text-base font-bold">✓</span>
           </div>
-
           <div>
-            <h4 className="font-semibold text-slate-900">{item.title}</h4>
-            <p className="mt-1 text-sm text-slate-600">{item.desc}</p>
+            <h4 className="font-bold text-slate-900">{item.title}</h4>
+            <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">{item.desc}</p>
           </div>
         </div>
       ))}

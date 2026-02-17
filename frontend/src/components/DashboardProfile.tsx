@@ -1,21 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { fetchCurrentUserFromApi } from "@/lib/supabaseClient";
+import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardProfile() {
-  const [user, setUser] = useState<{
-    id: string;
-    email?: string;
-    created_at?: string;
-    user_metadata?: { full_name?: string };
-  } | null>(null);
+  const { user, profile, isLandlord, loading } = useAuth();
 
-  useEffect(() => {
-    fetchCurrentUserFromApi().then(setUser);
-  }, []);
-
-  if (!user) {
+  if (loading || !user) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-5 animate-pulse">
         <div className="h-14 w-14 rounded-full bg-slate-100" />
@@ -26,8 +17,8 @@ export default function DashboardProfile() {
   }
 
   const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
-  const memberSince = user.created_at
-    ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+  const memberSince = profile?.created_at || user.created_at
+    ? new Date(profile?.created_at || user.created_at!).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
 
   return (
@@ -57,12 +48,17 @@ export default function DashboardProfile() {
             </div>
           </dl>
         </div>
-        <button
-          type="button"
-          className="self-start sm:self-center shrink-0 text-sm px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-        >
-          Edit profile
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-600">
+            {isLandlord ? "Renter + Landlord" : "Renter"}
+          </span>
+          <Link
+            href="/profile"
+            className="self-start sm:self-center shrink-0 text-sm px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            Profile
+          </Link>
+        </div>
       </div>
     </section>
   );

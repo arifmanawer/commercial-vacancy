@@ -14,30 +14,37 @@ export default function AuthNav() {
     router.refresh();
   };
 
+  const linkBase =
+    "text-[13px] font-medium transition-all duration-150 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:ring-offset-1";
+  const btnOutline =
+    "px-3 py-1.5 border border-slate-200 text-slate-700 hover:border-[var(--brand)] hover:text-[var(--brand)]";
+  const btnPrimary =
+    "px-3 py-1.5 bg-[var(--brand)] text-white hover:bg-[var(--brand-dark)]";
+
   if (loading) {
     return (
-      <div className="ml-auto flex items-center gap-3">
-        <span className="text-sm text-slate-500">Loading...</span>
+      <div className="flex items-center gap-2">
+        <span className="text-[13px] text-slate-400">Loading...</span>
       </div>
     );
   }
 
   if (user) {
     return (
-      <div className="ml-auto flex items-center gap-3">
-        <span className="hidden sm:inline-block text-sm text-slate-600 truncate max-w-[160px]">
+      <div className="flex items-center gap-2">
+        <span className="hidden sm:inline-block text-[13px] text-slate-500 truncate max-w-[140px]">
           {user.email}
         </span>
         <Link
           href="/dashboard/renter"
-          className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className={`hidden sm:inline-flex ${linkBase} ${btnOutline}`}
         >
           Dashboard
         </Link>
         <button
           type="button"
           onClick={handleSignOut}
-          className="text-sm px-4 py-2 rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          className={`${linkBase} ${btnPrimary}`}
         >
           Sign Out
         </button>
@@ -46,17 +53,11 @@ export default function AuthNav() {
   }
 
   return (
-    <div className="ml-auto flex items-center gap-3">
-      <Link
-        href="/signin"
-        className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
-      >
+    <div className="flex items-center gap-2">
+      <Link href="/signin" className={`hidden sm:inline-flex ${linkBase} ${btnOutline}`}>
         Sign In
       </Link>
-      <Link
-        href="/signup"
-        className="inline-flex items-center text-sm px-4 py-2 rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-      >
+      <Link href="/signup" className={`inline-flex ${linkBase} ${btnPrimary}`}>
         Sign Up
       </Link>
     </div>

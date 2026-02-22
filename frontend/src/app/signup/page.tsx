@@ -41,7 +41,7 @@ export default function SignUpPage() {
       }
       if (data.user) {
         logAuthEvent("signup", email, true);
-        router.push("/dashboard/renter");
+        router.push("/");
         router.refresh();
       }
     } catch (err) {

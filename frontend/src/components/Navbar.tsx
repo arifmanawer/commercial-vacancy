@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import AuthNav from "./AuthNav";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -41,7 +41,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 }
 
 export default function Navbar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { isLandlord, loading } = useAuth();
 
   return (
     <nav className="relative h-[var(--nav-height)] max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -63,10 +63,47 @@ export default function Navbar() {
             />
           </Link>
 
-          <div className="hidden lg:flex items-center gap-0.5">
-            {navLinks.map((link) => (
-              <NavLink key={link.href} href={link.href} label={link.label} />
-            ))}
+          <div className="hidden md:flex gap-8 ml-6">
+            <Link
+              href="/browse"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              Browse Spaces
+            </Link>
+            {!loading && isLandlord && (
+              <>
+                <Link
+                  href="/dashboard/landlord"
+                  className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+                >
+                  My Listings
+                </Link>
+                <Link
+                  href="/list"
+                  className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+                >
+                  Create Listing
+                </Link>
+              </>
+            )}
+            <Link
+              href="/how-it-works"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              How It Works
+            </Link>
+            <Link
+              href="/about"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              About
+            </Link>
+            <Link
+              href="/map"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              Map
+            </Link>
           </div>
         </div>
 

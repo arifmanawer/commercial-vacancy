@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function AuthNav() {
   const router = useRouter();
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isLandlord } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -30,14 +30,21 @@ export default function AuthNav() {
   }
 
   if (user) {
+    const dashboardHref = isLandlord ? "/dashboard/landlord" : "/dashboard/renter";
     return (
       <div className="flex items-center gap-2">
         <span className="hidden sm:inline-block text-[13px] text-slate-500 truncate max-w-[140px]">
           {user.email}
         </span>
         <Link
-          href="/dashboard/renter"
-          className={`hidden sm:inline-flex ${linkBase} ${btnOutline}`}
+          href="/profile"
+          className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+        >
+          Profile
+        </Link>
+        <Link
+          href={dashboardHref}
+          className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
         >
           Dashboard
         </Link>

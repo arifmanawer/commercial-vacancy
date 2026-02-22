@@ -41,7 +41,7 @@ export default function SignUpPage() {
       }
       if (data.user) {
         logAuthEvent("signup", email, true);
-        router.push("/dashboard/renter");
+        router.push("/");
         router.refresh();
       }
     } catch (err) {
@@ -54,11 +54,11 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
-      <header className="border-b border-slate-100">
+      <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-20 flex-grow">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-14 sm:py-20 flex-grow">
         <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-8">
           <h1 className="text-2xl font-semibold text-center text-slate-900">Create your account</h1>
           <p className="mt-2 text-sm text-slate-600 text-center">Get started — create an account to list or book spaces.</p>

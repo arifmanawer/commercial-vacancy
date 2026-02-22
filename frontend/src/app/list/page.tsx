@@ -4,19 +4,19 @@ import Footer from "@/components/Footer";
 
 export default function ListPage() {
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-slate-100">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
-      <main className="max-w-6xl mx-auto px-6 py-16">
+      <main className="max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
         <Link
           href="/"
-          className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded mb-6"
+          className="inline-flex items-center text-sm font-medium text-slate-600 hover:text-[#0d4f4f] transition-colors mb-8"
         >
           ← Back to home
         </Link>
-        <h1 className="text-3xl font-bold text-slate-900">List Your Space</h1>
-        <p className="mt-2 text-slate-600">
+        <h1 className="text-3xl md:text-4xl font-bold text-slate-900">List Your Space</h1>
+        <p className="mt-3 text-slate-600 leading-relaxed">
           Landlords can add property listings here. The form will be connected
           when the properties API is ready.
         </p>
@@ -39,7 +39,7 @@ export default function ListPage() {
         <div className="mt-8">
           <Link
             href="/signup"
-            className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            className="inline-flex items-center rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)] shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
           >
             Sign up to list your space
           </Link>

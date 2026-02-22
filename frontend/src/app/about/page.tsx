@@ -4,19 +4,19 @@ import Footer from "@/components/Footer";
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-slate-100">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
-      <main className="max-w-6xl mx-auto px-6 py-16">
+      <main className="max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
         <Link
           href="/"
-          className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded mb-6"
+          className="inline-flex items-center text-sm font-medium text-slate-600 hover:text-[#0d4f4f] transition-colors mb-8"
         >
           ← Back to home
         </Link>
-        <h1 className="text-3xl font-bold text-slate-900">About</h1>
-        <p className="mt-2 text-slate-600 max-w-2xl">
+        <h1 className="text-3xl md:text-4xl font-bold text-slate-900">About</h1>
+        <p className="mt-3 text-slate-600 max-w-2xl leading-relaxed">
           We help put vacant commercial space to work—connecting renters with
           spaces, landlords with tenants, and contractors with maintenance jobs
           so NYC buildings stay active and well maintained.
@@ -43,10 +43,15 @@ export default function AboutPage() {
           >
             Contact
           </h2>
-          <p className="text-slate-600">
-            Have questions or feedback? Reach out—we&apos;ll add contact details
-            here soon.
+          <p className="text-slate-600 mb-4">
+            Have questions or feedback? Reach out to our team.
           </p>
+          <Link
+            href="/contact"
+            className="inline-flex items-center text-sm font-medium text-[var(--brand)] hover:text-[var(--brand-dark)] transition-colors"
+          >
+            View team & contact info →
+          </Link>
         </section>
       </main>
       <Footer />

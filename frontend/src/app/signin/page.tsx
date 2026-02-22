@@ -11,7 +11,7 @@ import { logAuthEvent } from "../../lib/authLogger";
 export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/dashboard/renter";
+  const redirectTo = searchParams.get("redirect") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,11 +43,11 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 flex flex-col">
-      <header className="border-b border-slate-100">
+      <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-20 flex-grow">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-14 sm:py-20 flex-grow">
         <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-8">
           <h1 className="text-2xl font-semibold text-center text-slate-900">Sign in to your account</h1>
           <p className="mt-2 text-sm text-slate-600 text-center">Welcome back — enter your details below.</p>

@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --brand: #0d4f4f;
+    --brand-dark: #083838;
+    --brand-muted: rgba(13, 79, 79, 0.1);
+    --container: 72rem;
+    --nav-height: 4rem;
+    --section-gap: 6rem;
+    --section-gap-sm: 4rem;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply text-slate-900 antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}

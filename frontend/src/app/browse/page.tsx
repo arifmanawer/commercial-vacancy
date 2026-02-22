@@ -85,19 +85,19 @@ export default function BrowsePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-slate-100">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
-      <main className="max-w-6xl mx-auto px-6 py-16">
+      <main className="max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
         <Link
           href="/"
-          className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded mb-6"
+          className="inline-flex items-center text-sm font-medium text-slate-600 hover:text-[var(--brand)] transition-colors mb-8"
         >
           ← Back to home
         </Link>
-        <h1 className="text-3xl font-bold text-slate-900">Browse Spaces</h1>
-        <p className="mt-2 text-slate-600 max-w-2xl">
+        <h1 className="text-3xl md:text-4xl font-bold text-slate-900">Browse Spaces</h1>
+        <p className="mt-3 text-slate-600 max-w-2xl leading-relaxed">
           Search and filter available commercial spaces. Find venues by
           location, type, and budget. Listings will appear here once property
           management is wired up.
@@ -110,19 +110,19 @@ export default function BrowsePage() {
           <div className="flex flex-wrap gap-3">
             <select
               aria-label="Location"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:border-[var(--brand)]/30"
             >
               <option>Location</option>
             </select>
             <select
               aria-label="Type"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:border-[var(--brand)]/30"
             >
               <option>Type</option>
             </select>
             <select
               aria-label="Price"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:border-[var(--brand)]/30"
             >
               <option>Price</option>
             </select>
@@ -157,7 +157,7 @@ export default function BrowsePage() {
               return (
                 <article
                   key={listing.id}
-                  className="flex flex-col border border-slate-200 rounded-lg p-4 bg-white"
+                  className="flex flex-col border border-slate-200/80 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow"
                 >
                   <div className="h-28 rounded-md bg-slate-50 border border-slate-100 mb-4 flex items-center justify-center text-xs text-slate-400">
                     Listing image
@@ -177,7 +177,7 @@ export default function BrowsePage() {
                       type="button"
                       onClick={() => handleSave(listing.id)}
                       disabled={isSaving || isSaved}
-                      className="inline-flex items-center justify-center text-xs px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                      className="inline-flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:opacity-60 disabled:cursor-default transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
                     >
                       {isSaved
                         ? "Saved"

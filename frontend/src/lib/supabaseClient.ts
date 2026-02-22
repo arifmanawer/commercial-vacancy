@@ -1,8 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 /**
  * Supabase browser client for use in Client Components.
-
+ * Uses cookies so middleware can read the session on server requests.
  */
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -13,8 +13,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-/** Singleton Supabase client for auth and database in Client Components */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/** Singleton Supabase client - stores auth in cookies for SSR/middleware */
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 
 export async function getCurrentSession() {

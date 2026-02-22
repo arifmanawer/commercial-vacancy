@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -42,6 +43,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 export default function Navbar() {
   const { isLandlord, loading } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <nav className="relative h-[var(--nav-height)] max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">

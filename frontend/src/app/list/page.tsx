@@ -1,8 +1,19 @@
+
+"use client";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
+import CreateListingForm from "@/components/CreateListingForm";
 
 export default function ListPage() {
+  const { user, isLandlord, loading } = useAuth();
+
+  function handleCreateListing(data: unknown) {
+    // TODO: Connect to backend API
+    alert("Listing created! (stub)\n" + JSON.stringify(data, null, 2));
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
@@ -37,12 +48,29 @@ export default function ListPage() {
         </section>
 
         <div className="mt-8">
-          <Link
-            href="/signup"
-            className="inline-flex items-center rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)] shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
-          >
-            Sign up to list your space
-          </Link>
+          {loading ? (
+            <div>Loading...</div>
+          ) : user ? (
+            isLandlord ? (
+              <div className="bg-white rounded-xl shadow p-6 max-w-2xl">
+                <CreateListingForm onSubmit={handleCreateListing} />
+              </div>
+            ) : (
+              <Link
+                href="/profile"
+                className="inline-flex items-center rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)] shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+              >
+                Become a landlord to list your space
+              </Link>
+            )
+          ) : (
+            <Link
+              href="/signup"
+              className="inline-flex items-center rounded-xl bg-[var(--brand)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--brand-dark)] shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40"
+            >
+              Sign up to list your space
+            </Link>
+          )}
         </div>
       </main>
       <Footer />

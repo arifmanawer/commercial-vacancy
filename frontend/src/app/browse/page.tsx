@@ -96,14 +96,17 @@ export default function BrowsePage() {
         const imgMap = new Map<string, any>();
         (imgRows ?? []).forEach((r: any) => imgMap.set(r.property_id, r));
 
-        const view = listingRows.map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          city: r.city,
-          property_type: r.property_type,
-          price: priceMap.get(r.id)?.price ? `$${priceMap.get(r.id).price}` : undefined,
-          image: imgMap.get(r.id)?.image_url?.[0] ?? null,
-        }));
+        const view = listingRows.map((r: any) => {
+          const pricing = priceMap.get(r.id);
+          return {
+            id: r.id,
+            title: r.title,
+            city: r.city,
+            property_type: r.property_type,
+            price: pricing ? `${pricing.price}/${pricing.rental_type}` : undefined,
+            image: imgMap.get(r.id)?.image_url?.[0] ?? null,
+          };
+        });
 
         if (mounted) setListings(view);
       } catch (err) {
@@ -170,12 +173,8 @@ export default function BrowsePage() {
         >
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-slate-900">
-              Example listings (save feature)
+              Current Property Listings
             </h2>
-            <p className="text-xs text-slate-500">
-              These are sample spaces to test saving; real listings will replace
-              them later.
-            </p>
           </div>
 
           {error && (

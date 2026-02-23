@@ -5,13 +5,117 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import CreateListingForm from "@/components/CreateListingForm";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+type ListingFormInput = {
+  title: string;
+  description?: string;
+  address: string;
+  property_type: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  price: string | number;
+  security_deposit?: string | number;
+  rental_type: string;
+  photos?: File[];
+};
 
 export default function ListPage() {
   const { user, isLandlord, loading } = useAuth();
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleCreateListing(data: unknown) {
-    // TODO: Connect to backend API
-    alert("Listing created! (stub)\n" + JSON.stringify(data, null, 2));
+  async function handleCreateListing(data: ListingFormInput) {
+    if (!user) {
+      alert("You must be signed in to create a listing.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Insert listing row
+      const { data: listingData, error: listingError } = await supabase
+        .from("listings")
+        .insert([
+            {
+              user_id: user.id,
+              title: data.title,
+              description: data.description ?? null,
+              address: data.address,
+              property_type: data.property_type,
+              city: data.city,
+              state: data.state,
+              zip_code: data.zip_code,
+            },
+          ])
+        .select()
+        .single();
+
+      if (listingError || !listingData) {
+        throw listingError ?? new Error("Failed to create listing");
+      }
+
+      const listingId = listingData.id;
+
+      // Upload photos to Supabase storage (bucket: property-photos)
+      const photoFiles = data.photos ?? [];
+      const publicUrls: string[] = [];
+
+      for (let i = 0; i < photoFiles.length; i++) {
+        const file = photoFiles[i];
+        const fileExt = file.name.split(".").pop();
+        const filename = `listings/${listingId}/${Date.now()}-${i}.${fileExt}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("listing_photos")
+          .upload(filename, file, { cacheControl: "3600", upsert: false });
+
+        if (uploadError) {
+          console.warn("upload error", uploadError.message);
+          continue;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from("listing_photos")
+          .getPublicUrl(uploadData.path);
+
+        publicUrls.push(urlData.publicUrl);
+      }
+
+      // Insert pricing
+      const { error: priceErr } = await supabase.from("property_pricing").insert([
+        {
+          property_id: listingId,
+          price: data.price,
+          security_deposit: data.security_deposit ?? null,
+          rental_type: data.rental_type,
+        },
+      ]);
+      if (priceErr) console.warn("pricing insert error", priceErr.message);
+
+      // Insert images record (store urls as array)
+      if (publicUrls.length > 0) {
+        const { error: imgErr } = await supabase.from("listings_images").insert([
+          {
+            property_id: listingId,
+            image_url: publicUrls,
+            is_primary: true,
+            display_order: 0,
+          },
+        ]);
+        if (imgErr) console.warn("images insert error", imgErr.message);
+      }
+
+      // Redirect to browse so listing is visible
+      router.push("/browse");
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message ?? "Failed to create listing");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (

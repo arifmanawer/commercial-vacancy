@@ -2,12 +2,11 @@
 "use client";
 import { useState } from "react";
 
-// Property type, status, rental_type enums from schema
+// Property type and rental_type enums from schema
 const PROPERTY_TYPES = ["Apartment", "House", "Commercial", "Office", "Studio"];
-const STATUS_OPTIONS = ["Available", "Rented", "Maintenance"];
 const RENTAL_TYPES = ["Daily", "Weekly", "Monthly", "Yearly"];
 
-export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) => void }) {
+export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) => Promise<void> | void }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -16,12 +15,18 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
     city: "",
     state: "",
     zip_code: "",
-    status: STATUS_OPTIONS[0],
     price: "",
     security_deposit: "",
     rental_type: RENTAL_TYPES[0],
   });
   const [submitting, setSubmitting] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+
+  function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    if (!list) return;
+    setFiles(Array.from(list));
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -30,7 +35,7 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    await onSubmit(form);
+    await onSubmit({ ...form, photos: files });
     setSubmitting(false);
   }
 
@@ -78,6 +83,26 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
         />
       </div>
 
+      <div>
+        <label className="block text-slate-700 font-semibold mb-2">Photos</label>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFiles}
+          className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[var(--brand)] file:text-white hover:file:bg-[var(--brand-dark)]"
+        />
+        {files.length > 0 && (
+          <div className="mt-3 flex gap-2">
+            {files.slice(0, 4).map((f, i) => (
+              <div key={i} className="w-20 h-20 rounded-md overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center text-xs text-slate-500">
+                <img src={URL.createObjectURL(f)} alt={f.name} className="object-cover w-full h-full" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div>
           <label className="block text-slate-700 font-semibold mb-1">Address</label>
@@ -114,7 +139,7 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-slate-700 font-semibold mb-1">Zip Code</label>
           <input
@@ -125,19 +150,6 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
             placeholder="Zip Code"
           />
-        </div>
-        <div>
-          <label className="block text-slate-700 font-semibold mb-1">Status</label>
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
-          >
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
         </div>
         <div>
           <label className="block text-slate-700 font-semibold mb-1">Rental Type</label>

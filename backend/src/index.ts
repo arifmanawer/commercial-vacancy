@@ -11,10 +11,21 @@ const app = express();
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: config.frontendUrl,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser clients (no Origin header)
+      if (!origin) return callback(null, true);
+
+      // In dev, allow any origin so LAN access (e.g. http://192.168.x.x:3000) works.
+      if (config.nodeEnv === 'development') return callback(null, true);
+
+      // In non-dev, lock down to the configured frontend URL
+      return callback(null, origin === config.frontendUrl);
+    },
+    credentials: true,
+  })
+);
 
 // Request parsing
 app.use(express.json());

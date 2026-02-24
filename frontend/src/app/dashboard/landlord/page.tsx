@@ -1,6 +1,7 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
+import Link from "next/link";
 
 export default function LandlordDashboardPage() {
   return (
@@ -65,6 +66,36 @@ export default function LandlordDashboardPage() {
                 Once bookings are completed, your payouts will appear here.
               </p>
             </div>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="tools-heading"
+          className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2
+                id="tools-heading"
+                className="text-lg font-semibold text-slate-900"
+              >
+                Tools
+              </h2>
+              <p className="text-sm text-slate-600">
+                Shortcuts to manage your spaces and work with contractors.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard/landlord/contractors"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+            >
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+                C
+              </span>
+              <span>Find Contractors</span>
+            </Link>
           </div>
         </section>
 

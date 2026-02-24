@@ -6,7 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabaseClient";
+import { getApiUrl } from "@/lib/api";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -24,19 +24,46 @@ export default function ProfilePage() {
     setUpgrading(true);
     setError(null);
     try {
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ is_landlord: true })
-        .eq("id", user.id);
+      const res = await fetch(`${getApiUrl()}/api/profiles/upgrade-landlord`, {
+        method: "POST",
+        headers: {
+          "X-User-Id": user.id,
+        },
+      });
 
-      if (updateError) throw updateError;
+      const body = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || "Failed to upgrade. Try again.");
+      }
 
       await refreshProfile();
       setShowModal(false);
       router.push("/dashboard/landlord");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upgrade. Try again.");
+      if (err instanceof Error) {
+        setError(err.message);
+        return;
+      }
+      if (typeof err === "string") {
+        setError(err);
+        return;
+      }
+      if (err && typeof err === "object" && "message" in err) {
+        const msg = (err as { message?: unknown }).message;
+        if (typeof msg === "string" && msg.trim()) {
+          setError(msg);
+          return;
+        }
+      }
+      try {
+        setError(JSON.stringify(err));
+      } catch {
+        setError("Failed to upgrade. Try again.");
+      }
     } finally {
       setUpgrading(false);
     }
@@ -145,6 +172,33 @@ export default function ProfilePage() {
               </Link>
             </div>
           )}
+        </section>
+
+        {/* Contractor section */}
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Offer services as a contractor
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Create a contractor profile so landlords can find and hire you
+                for jobs.
+              </p>
+            </div>
+            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 border border-slate-200">
+              Contractor
+            </span>
+          </div>
+
+          <div className="pt-2">
+            <Link
+              href="/dashboard/contractor"
+              className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2"
+            >
+              Go to contractor dashboard
+            </Link>
+          </div>
         </section>
       </main>
 

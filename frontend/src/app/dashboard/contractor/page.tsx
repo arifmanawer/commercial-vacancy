@@ -1,8 +1,168 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
+import { useAuth } from "@/contexts/AuthContext";
+import { getApiUrl } from "@/lib/api";
+import type { Contractor, ContractorAvailabilityStatus } from "@/types/database";
+
+type ServiceOption =
+  | "Painting"
+  | "Cleaning"
+  | "Renovation"
+  | "Staging"
+  | "Repairs"
+  | "Electrical"
+  | "Plumbing";
+
+const SERVICE_OPTIONS: ServiceOption[] = [
+  "Painting",
+  "Cleaning",
+  "Renovation",
+  "Staging",
+  "Repairs",
+  "Electrical",
+  "Plumbing",
+];
+
+interface ApiContractorResponse {
+  success: boolean;
+  data?: Contractor;
+  error?: string;
+}
 
 export default function ContractorDashboardPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  const [existing, setExisting] = useState<Contractor | null>(null);
+  const [businessName, setBusinessName] = useState("");
+  const [selectedServices, setSelectedServices] = useState<ServiceOption[]>([]);
+  const [hourlyRate, setHourlyRate] = useState("");
+  const [serviceRadius, setServiceRadius] = useState("");
+  const [availabilityStatus, setAvailabilityStatus] =
+    useState<ContractorAvailabilityStatus>("available");
+  const [availableDays, setAvailableDays] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchProfile = async () => {
+      setError(null);
+      try {
+        const res = await fetch(`${getApiUrl()}/api/contractors/me`, {
+          headers: {
+            "X-User-Id": user.id,
+          },
+        });
+
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(body?.error || "Failed to load contractor profile");
+        }
+
+        const json = (await res.json()) as ApiContractorResponse;
+        if (json.data) {
+          setExisting(json.data);
+          setBusinessName(json.data.business_name);
+          setSelectedServices(
+            json.data.services.filter((s): s is ServiceOption =>
+              SERVICE_OPTIONS.includes(s as ServiceOption)
+            )
+          );
+          setHourlyRate(String(json.data.hourly_rate || ""));
+          setServiceRadius(String(json.data.service_radius || ""));
+          setAvailabilityStatus(json.data.availability.status);
+          setAvailableDays(json.data.availability.available_days || []);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load contractor profile"
+        );
+      } finally {
+        setLoaded(true);
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
+
+  const toggleService = (service: ServiceOption) => {
+    setSelectedServices((prev) =>
+      prev.includes(service)
+        ? prev.filter((s) => s !== service)
+        : [...prev, service]
+    );
+  };
+
+  const toggleDay = (day: string) => {
+    setAvailableDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const payload = {
+        business_name: businessName.trim(),
+        services: selectedServices,
+        hourly_rate: Number(hourlyRate),
+        service_radius: Number(serviceRadius),
+        availability_status: availabilityStatus,
+        available_days: availableDays,
+      };
+
+      const res = await fetch(`${getApiUrl()}/api/contractors/me`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | ApiContractorResponse
+        | null;
+
+      if (!res.ok || !json?.success || !json.data) {
+        throw new Error(json?.error || "Failed to save contractor profile");
+      }
+
+      setExisting(json.data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save contractor profile"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dayOrder: string[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
@@ -17,135 +177,192 @@ export default function ContractorDashboardPage() {
             Contractor Dashboard
           </h1>
           <p className="text-slate-600 max-w-2xl">
-            Monitor your active listings, review booking requests, and keep
-            track of payouts for your spaces.
+            Create or update your contractor profile so landlords can find and
+            hire you for jobs.
           </p>
         </section>
 
-        <section aria-labelledby="overview-heading" className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2
-              id="overview-heading"
-              className="text-lg font-semibold text-slate-900"
-            >
-              Overview
-            </h2>
-            <p className="text-xs text-slate-500">
-              High-level view of your hosting activity.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Active Contracts
-              </p>
-              <p className="text-2xl font-bold text-slate-900">0</p>
-              <p className="text-xs text-slate-500">
-                Publish a space to start receiving booking requests.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Pending requests
-              </p>
-              <p className="text-2xl font-bold text-slate-900">0</p>
-              <p className="text-xs text-slate-500">
-                New booking requests from renters will show up here.
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Upcoming payouts
-              </p>
-              <p className="text-2xl font-bold text-slate-900">$0.00</p>
-              <p className="text-xs text-slate-500">
-                Once bookings are completed, your payouts will appear here.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <section
-            aria-labelledby="listings-heading"
-            className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2
-                  id="listings-heading"
-                  className="text-lg font-semibold text-slate-900"
-                >
-                  Your bookings
-                </h2>
-                <p className="text-sm text-slate-600">
-                  Manage the services you&apos;ve made available for contract.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="hidden sm:inline-flex items-center rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-              >
-                Add new services
-              </button>
-            </div>
-
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              You don&apos;t have any bookings yet. Click &quot;Add new
-              services&quot; to publish your first service.
-            </div>
-          </section>
-
-          <section
-            aria-labelledby="requests-heading"
-            className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2
-                  id="requests-heading"
-                  className="text-lg font-semibold text-slate-900"
-                >
-                  Booking requests
-                </h2>
-                <p className="text-sm text-slate-600">
-                  Review, approve, or decline incoming booking requests.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              There are no booking requests yet. When renters request your
-              services, you&apos;ll be able to manage them here.
-            </div>
-          </section>
-        </section>
-
         <section
-          aria-labelledby="payouts-heading"
+          aria-labelledby="contractor-profile-heading"
           className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
         >
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2
-                id="payouts-heading"
+                id="contractor-profile-heading"
                 className="text-lg font-semibold text-slate-900"
               >
-                Payouts
+                {existing ? "Your contractor profile" : "Set up your profile"}
               </h2>
               <p className="text-sm text-slate-600">
-                Track completed bookings and payout history.
+                Share what you do, where you work, and when you’re available.
               </p>
             </div>
           </div>
 
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-            No payouts yet. Once bookings are completed and processed,
-            you&apos;ll see your payout history here.
-          </div>
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-6" onSubmit={handleSave}>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-slate-700">
+                Business name
+              </label>
+              <input
+                type="text"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="e.g. Downtown Repair & Maintenance"
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-700">Services</p>
+              <div className="flex flex-wrap gap-2">
+                {SERVICE_OPTIONS.map((service) => {
+                  const active = selectedServices.includes(service);
+                  return (
+                    <button
+                      key={service}
+                      type="button"
+                      onClick={() => toggleService(service)}
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border ${
+                        active
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      {service}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-slate-700">
+                  Hourly rate (USD)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={hourlyRate}
+                  onChange={(e) => setHourlyRate(e.target.value)}
+                  placeholder="e.g. 75"
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-slate-700">
+                  Service radius (miles)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step="1"
+                  value={serviceRadius}
+                  onChange={(e) => setServiceRadius(e.target.value)}
+                  placeholder="e.g. 10"
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-700">
+                  Availability status
+                </p>
+                <div className="mt-1 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityStatus("available")}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md ${
+                      availabilityStatus === "available"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    Available now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityStatus("soon")}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md ${
+                      availabilityStatus === "soon"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    Available soon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityStatus("busy")}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md ${
+                      availabilityStatus === "busy"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    Busy
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-700">
+                  Days you typically work
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {dayOrder.map((day) => {
+                    const active = availableDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleDay(day)}
+                        className={`inline-flex items-center justify-center rounded-md border px-2 py-1 text-[11px] font-medium ${
+                          active
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <p className="text-xs text-slate-500">
+                You can update these details anytime as your availability
+                changes.
+              </p>
+              <button
+                type="submit"
+                disabled={saving || !loaded}
+                className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving
+                  ? "Saving…"
+                  : existing
+                  ? "Save changes"
+                  : "Create profile"}
+              </button>
+            </div>
+          </form>
         </section>
       </main>
 

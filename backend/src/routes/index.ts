@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import userRoutes from './users';
 import authEventsRoutes from './authEvents';
+import contractorRoutes from './contractors';
+import profileRoutes from './profiles';
 
 const router = Router();
 
 router.use('/users', userRoutes);
 router.use('/auth-events', authEventsRoutes);
+router.use('/contractors', contractorRoutes);
+router.use('/profiles', profileRoutes);
 
 // Default API info route
 router.get('/', (_req, res) => {
@@ -20,4 +24,5 @@ router.get('/', (_req, res) => {
 });
 
 export default router;
+
 

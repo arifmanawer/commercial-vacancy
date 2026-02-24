@@ -32,7 +32,7 @@ export async function getCurrentSession() {
 export async function fetchCurrentUserFromApi() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) return null;
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   const res = await fetch(`${apiUrl}/api/users`, {
     headers: { 'X-User-Id': session.user.id },
   });

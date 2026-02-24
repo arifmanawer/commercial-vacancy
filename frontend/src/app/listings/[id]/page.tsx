@@ -90,6 +90,8 @@ export default function ListingPage({ params }: { params: Promise<{ id: string }
     );
   }
 
+
+
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans">
       <header className="border-b border-slate-100 sticky top-0 bg-white z-50">

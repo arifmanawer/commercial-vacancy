@@ -229,12 +229,12 @@ export default function BrowsePage() {
                             ? "Saving..."
                             : "Save space"}
                       </button>
-                      <button
-                        type="button"
+                      <Link
+                        href={`/listings/${listing.id}`}
                         className="text-xs text-slate-600 hover:text-slate-900"
                       >
                         View details
-                      </button>
+                      </Link>
                     </div>
                   </article>
                 );

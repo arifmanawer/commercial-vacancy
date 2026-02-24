@@ -31,20 +31,21 @@ export default function AuthNav() {
 
   if (user) {
     const dashboardHref = isLandlord ? "/dashboard/landlord" : "/dashboard/renter";
+    const fullName = user.user_metadata?.full_name || user.email;
     return (
       <div className="flex items-center gap-2">
-        <span className="hidden sm:inline-block text-[13px] text-slate-500 truncate max-w-[140px]">
-          {user.email}
+        <span className="hidden lg:inline-block text-[13px] text-slate-500 truncate max-w-[140px]">
+          {fullName}
         </span>
         <Link
           href="/profile"
-          className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="hidden lg:inline-block text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
         >
           Profile
         </Link>
         <Link
           href={dashboardHref}
-          className="hidden sm:inline-block text-sm px-4 py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+          className="hidden lg:inline-block text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
         >
           Dashboard
         </Link>

@@ -43,20 +43,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(signin);
   }
 
-  // /list and /dashboard/landlord require landlord role (DB-enforced; frontend redirect for UX)
+  // /list and /dashboard/landlord require landlord; /dashboard/contractor requires contractor
   const listPath = "/list";
   const landlordDashboardPath = "/dashboard/landlord";
+  const contractorDashboardPath = "/dashboard/contractor";
   const pathname = request.nextUrl.pathname;
-  if (user && (pathname === listPath || pathname.startsWith(landlordDashboardPath))) {
+  if (
+    user &&
+    (pathname === listPath ||
+      pathname.startsWith(landlordDashboardPath) ||
+      pathname.startsWith(contractorDashboardPath))
+  ) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_landlord")
+      .select("is_landlord, is_contractor")
       .eq("id", user.id)
       .single();
-    if (profile && !profile.is_landlord) {
-      if (pathname === listPath) {
-        return NextResponse.redirect(new URL("/profile?upgrade=1", request.url));
-      }
+    if (pathname === listPath && profile && !profile.is_landlord) {
+      return NextResponse.redirect(new URL("/profile?upgrade=1", request.url));
+    }
+    if (pathname.startsWith(landlordDashboardPath) && profile && !profile.is_landlord) {
+      return NextResponse.redirect(new URL("/dashboard/renter", request.url));
+    }
+    if (pathname.startsWith(contractorDashboardPath) && profile && !profile.is_contractor) {
       return NextResponse.redirect(new URL("/dashboard/renter", request.url));
     }
   }

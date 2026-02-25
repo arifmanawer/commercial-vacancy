@@ -14,12 +14,11 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_landlord")
+    .select("is_landlord, is_contractor")
     .eq("id", user.id)
     .single();
 
-  if (profile?.is_landlord) {
-    redirect("/dashboard/landlord");
-  }
+  if (profile?.is_landlord) redirect("/dashboard/landlord");
+  if (profile?.is_contractor) redirect("/dashboard/contractor");
   redirect("/dashboard/renter");
 }

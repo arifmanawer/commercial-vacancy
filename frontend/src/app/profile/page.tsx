@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -34,12 +34,20 @@ export default function ProfilePage() {
   const { user, profile, isLandlord, isContractor, loading: authLoading } = useAuth();
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const { refreshProfile } = useAuth();
+
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(null), 4000);
+    return () => clearTimeout(t);
+  }, [success]);
 
   const handleRoleChange = async (roleId: string, checked: boolean) => {
     if (!user?.id || roleId === "renter") return;
     setUpdating(true);
     setError(null);
+    setSuccess(null);
     try {
       const body =
         roleId === "landlord"
@@ -65,6 +73,7 @@ export default function ProfilePage() {
 
       await refreshProfile();
       router.refresh();
+      setSuccess("Role updated.");
     } catch (err) {
       const msg =
         err instanceof Error
@@ -148,6 +157,11 @@ export default function ProfilePage() {
             {error && (
               <p className="text-sm text-red-600 mb-3" role="alert">
                 {error}
+              </p>
+            )}
+            {success && (
+              <p className="text-sm text-green-600 mb-3" role="status">
+                {success}
               </p>
             )}
             <div className="space-y-3">

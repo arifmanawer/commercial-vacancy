@@ -71,10 +71,27 @@ function mapRowToApiModel(row: ContractorRow): ContractorApiModel {
   };
 }
 
+async function requireContractorRole(userId: string, res: Response): Promise<boolean> {
+  const { data: profile, error } = await supabaseAdmin
+    .from('profiles')
+    .select('is_contractor')
+    .eq('id', userId)
+    .single();
+  if (error || !profile?.is_contractor) {
+    res.status(403).json({
+      success: false,
+      error: 'Contractor role required. Enable the Contractor role on your profile first.',
+    });
+    return false;
+  }
+  return true;
+}
+
 /**
  * GET /api/contractors/me
  *
  * Returns the contractor profile for the authenticated user (if any).
+ * Requires profiles.is_contractor = true.
  */
 router.get<
   unknown,
@@ -87,6 +104,11 @@ router.get<
     if (!userId) {
       logContractorApi('GET', '/api/contractors/me', undefined, false, 'Missing user_id');
       res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
+      return;
+    }
+
+    if (!(await requireContractorRole(userId, res))) {
+      logContractorApi('GET', '/api/contractors/me', userId, false, 'Not contractor');
       return;
     }
 
@@ -145,6 +167,11 @@ router.post<
     if (!userId) {
       logContractorApi('POST', '/api/contractors/me', undefined, false, 'Missing user_id');
       res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
+      return;
+    }
+
+    if (!(await requireContractorRole(userId, res))) {
+      logContractorApi('POST', '/api/contractors/me', userId, false, 'Not contractor');
       return;
     }
 

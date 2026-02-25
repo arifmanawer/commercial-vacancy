@@ -10,6 +10,7 @@ type AuthState = {
   session: Session | null;
   profile: Profile | null;
   isLandlord: boolean;
+  isContractor: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -20,7 +21,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, is_landlord, created_at")
+    .select("id, email, is_landlord, is_contractor, created_at")
     .eq("id", userId)
     .single();
   if (error || !data) return null;
@@ -43,17 +44,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user?.id) {
-        const p = await fetchProfile(s.user.id);
-        setProfile(p);
-      } else {
-        setProfile(null);
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session: s } }) => {
+        if (cancelled) return;
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user?.id) {
+          try {
+            const p = await fetchProfile(s.user.id);
+            if (!cancelled) setProfile(p);
+          } catch {
+            if (!cancelled) setProfile(null);
+          }
+        } else {
+          setProfile(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    // Fallback: never leave loading true for more than 3s (e.g. if getSession hangs)
+    const timeoutId = setTimeout(() => {
+      setLoading((prev) => (prev ? false : prev));
+    }, 3000);
 
     const {
       data: { subscription },
@@ -68,7 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
@@ -77,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isLandlord = profile?.is_landlord ?? false;
+  const isContractor = profile?.is_contractor ?? false;
 
   return (
     <AuthContext.Provider
@@ -85,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         profile,
         isLandlord,
+        isContractor,
         loading,
         signOut,
         refreshProfile,

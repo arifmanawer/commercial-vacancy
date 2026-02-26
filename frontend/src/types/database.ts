@@ -2,6 +2,7 @@ export type Profile = {
   id: string;
   email: string;
   is_landlord: boolean;
+  is_contractor: boolean;
   created_at: string;
 };
 

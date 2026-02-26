@@ -68,26 +68,31 @@ export default function ContractorDashboardPage() {
           },
         });
 
+        const body = (await res.json().catch(() => null)) as
+          | ApiContractorResponse
+          | { error?: string }
+          | null;
+
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          throw new Error(body?.error || "Failed to load contractor profile");
+          const message =
+            res.status === 403
+              ? "Enable the Contractor role on your Profile to use this page."
+              : (body && "error" in body ? body.error : "Failed to load contractor profile");
+          throw new Error(message);
         }
 
-        const json = (await res.json()) as ApiContractorResponse;
-        if (json.data) {
-          setExisting(json.data);
-          setBusinessName(json.data.business_name);
+        if (body?.data) {
+          setExisting(body.data);
+          setBusinessName(body.data.business_name);
           setSelectedServices(
-            json.data.services.filter((s): s is ServiceOption =>
+            body.data.services.filter((s): s is ServiceOption =>
               SERVICE_OPTIONS.includes(s as ServiceOption)
             )
           );
-          setHourlyRate(String(json.data.hourly_rate || ""));
-          setServiceRadius(String(json.data.service_radius || ""));
-          setAvailabilityStatus(json.data.availability.status);
-          setAvailableDays(json.data.availability.available_days || []);
+          setHourlyRate(String(body.data.hourly_rate || ""));
+          setServiceRadius(String(body.data.service_radius || ""));
+          setAvailabilityStatus(body.data.availability.status);
+          setAvailableDays(body.data.availability.available_days || []);
         }
       } catch (err) {
         setError(

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function DashboardProfile() {
-  const { user, profile, isLandlord, loading } = useAuth();
+  const { user, profile, isLandlord, isContractor, loading } = useAuth();
 
   if (loading || !user) {
     return (
@@ -50,7 +50,9 @@ export default function DashboardProfile() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-600">
-            {isLandlord ? "Renter + Landlord" : "Renter"}
+            {["Renter", isLandlord && "Landlord", isContractor && "Contractor"]
+              .filter(Boolean)
+              .join(" + ")}
           </span>
           <Link
             href="/profile"

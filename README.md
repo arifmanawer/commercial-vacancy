@@ -4,7 +4,7 @@
 
 Run the entire application (frontend + backend) with a single command. Requires only **Docker** and **Git**—no Node.js or npm needed.
 
-**Supabase:** Copy `.env.example` to `.env` and add your Supabase URL, anon key, and service role key. Never commit `.env`. Run the SQL migration in Supabase Dashboard → SQL Editor: `supabase/migrations/001_profiles.sql` (creates profiles table, trigger, RLS).
+**Supabase:** Copy `.env.example` to `.env` and add your Supabase URL, anon key, and service role key. Never commit `.env`. Run the SQL migrations in Supabase Dashboard → SQL Editor, in order: `001_profiles.sql`, `002_landlord_roles_and_listings.sql`, `003_contractors.sql`, `004_add_is_contractor.sql`.
 
 ### Start the application
 

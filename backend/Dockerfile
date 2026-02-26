@@ -11,8 +11,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port 5000
-EXPOSE 5000
+# Expose port 5001
+EXPOSE 5001
 
 # Run dev server with hot reload (ts-node-dev has --respawn built-in)
 CMD ["npm", "run", "dev"]

@@ -12,21 +12,77 @@ export default function LandlordDashboardPage() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [loadingInquiries, setLoadingInquiries] = useState(false);
+  const [inquiriesError, setInquiriesError] = useState<string | null>(null);
+  const [editingInquiryId, setEditingInquiryId] = useState<string | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState<string>("");
+  const [rescheduleNote, setRescheduleNote] = useState<string>("");
+  const [editMode, setEditMode] = useState<"reschedule" | "decline" | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!user) return;
-    setLoading(true);
-    setError(null);
-    supabase
-      .from("listings")
-      .select("id, title, city, state, property_type, status")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) setError(error.message);
-        setListings(data || []);
+
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+      setInquiries([]);
+      setInquiriesError(null);
+
+      const { data: listingRows, error: listingError } = await supabase
+        .from("listings")
+        .select("id, title, city, state, property_type, status")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (cancelled) return;
+
+      if (listingError) {
+        setError(listingError.message);
+        setListings([]);
         setLoading(false);
-      });
+        return;
+      }
+
+      const safeListings = listingRows || [];
+      setListings(safeListings);
+      setLoading(false);
+
+      const ids = safeListings.map((l: any) => l.id);
+      if (!ids.length) return;
+
+      setLoadingInquiries(true);
+      const { data: inquiryRows, error: inquiryError } = await supabase
+        .from("listing_inquiries")
+        .select(
+          "id, listing_id, type, message, preferred_time, status, landlord_message, landlord_suggested_time, created_at, resolved_at",
+        )
+        .in("listing_id", ids)
+        .order("created_at", { ascending: false });
+
+      if (cancelled) return;
+
+      if (inquiryError) {
+        setInquiriesError(
+          inquiryError.message ||
+            "Could not load interest or tour requests.",
+        );
+        setInquiries([]);
+      } else {
+        setInquiries(inquiryRows || []);
+      }
+      setLoadingInquiries(false);
+    }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const handleDelete = async (id: string) => {
@@ -47,6 +103,26 @@ export default function LandlordDashboardPage() {
     } else {
       setListings((prev) => prev.filter((l) => l.id !== id));
     }
+  };
+
+  const updateInquiry = async (
+    id: string,
+    updates: Record<string, unknown>,
+  ) => {
+    const { error } = await supabase
+      .from("listing_inquiries")
+      .update(updates)
+      .eq("id", id);
+    if (error) {
+      setInquiriesError(
+        error.message || "Could not update this request. Please try again.",
+      );
+      return;
+    }
+    setInquiriesError(null);
+    setInquiries((prev) =>
+      prev.map((inq) => (inq.id === id ? { ...inq, ...updates } : inq)),
+    );
   };
 
   return (
@@ -86,7 +162,9 @@ export default function LandlordDashboardPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Active listings
               </p>
-              <p className="text-2xl font-bold text-slate-900">0</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {listings.filter((l) => l.status === "Available").length}
+              </p>
               <p className="text-xs text-slate-500">
                 Publish a space to start receiving booking requests.
               </p>
@@ -96,7 +174,9 @@ export default function LandlordDashboardPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Pending requests
               </p>
-              <p className="text-2xl font-bold text-slate-900">0</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {inquiries.filter((inq) => inq.status === "pending").length}
+              </p>
               <p className="text-xs text-slate-500">
                 New booking requests from renters will show up here.
               </p>
@@ -214,15 +294,258 @@ export default function LandlordDashboardPage() {
                   Booking requests
                 </h2>
                 <p className="text-sm text-slate-600">
-                  Review, approve, or decline incoming booking requests.
+                  Review contact and tour requests from interested renters.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              There are no booking requests yet. When renters request your
-              spaces, you&apos;ll be able to manage them here.
-            </div>
+            {loadingInquiries ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Loading requests…
+              </div>
+            ) : inquiriesError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">
+                {inquiriesError}
+              </div>
+            ) : inquiries.length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                There are no contact or tour requests yet. When renters express
+                interest in your spaces, you&apos;ll be able to review them
+                here.
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {inquiries.map((inq) => {
+                  const listing = listings.find(
+                    (l) => l.id === inq.listing_id,
+                  );
+                  const statusLabel =
+                    inq.status === "accepted"
+                      ? "Accepted"
+                      : inq.status === "declined"
+                      ? "Declined"
+                      : inq.status === "reschedule_proposed"
+                      ? "Reschedule proposed"
+                      : "Pending";
+                  const statusColorClasses =
+                    inq.status === "accepted"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                      : inq.status === "declined"
+                      ? "bg-red-50 text-red-700 border-red-100"
+                      : inq.status === "reschedule_proposed"
+                      ? "bg-amber-50 text-amber-700 border-amber-100"
+                      : "bg-slate-50 text-slate-700 border-slate-200";
+                  return (
+                    <li key={inq.id} className="py-3 flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {inq.type === "tour"
+                              ? "Tour request"
+                              : "Contact request"}
+                          </span>
+                          <span className="text-sm font-medium text-slate-900">
+                            {listing?.title ?? "Listing"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs text-slate-500">
+                            {new Date(inq.created_at).toLocaleString()}
+                          </span>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusColorClasses}`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      {inq.preferred_time && (
+                        <p className="text-xs text-slate-600">
+                          Preferred time:{" "}
+                          {new Date(inq.preferred_time).toLocaleString()}
+                        </p>
+                      )}
+                      {inq.message && (
+                        <p className="text-xs text-slate-700">
+                          “{inq.message}”
+                        </p>
+                      )}
+                      {inq.landlord_message && (
+                        <p className="text-xs text-slate-600">
+                          Your note: “{inq.landlord_message}”
+                        </p>
+                      )}
+                      {inq.landlord_suggested_time && (
+                        <p className="text-xs text-slate-600">
+                          Suggested time:{" "}
+                          {new Date(
+                            inq.landlord_suggested_time,
+                          ).toLocaleString()}
+                        </p>
+                      )}
+                      {inq.status === "pending" && (
+                        <>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+                              onClick={() =>
+                                updateInquiry(inq.id, {
+                                  status: "accepted",
+                                  resolved_at: new Date().toISOString(),
+                                })
+                              }
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100"
+                              onClick={() => {
+                                setEditingInquiryId(inq.id);
+                                setEditMode("decline");
+                                setRescheduleNote("");
+                                setRescheduleTime("");
+                              }}
+                            >
+                              Decline
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-50"
+                              onClick={() => {
+                                setEditingInquiryId(inq.id);
+                                setEditMode("reschedule");
+                                setRescheduleTime(
+                                  inq.preferred_time || rescheduleTime,
+                                );
+                                setRescheduleNote(inq.landlord_message || "");
+                              }}
+                            >
+                              Propose new time
+                            </button>
+                          </div>
+                          {editingInquiryId === inq.id && editMode && (
+                            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+                              {editMode === "reschedule" ? (
+                                <>
+                                  <label className="block text-xs font-medium text-slate-600">
+                                    New date &amp; time
+                                    <input
+                                      type="datetime-local"
+                                      className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-white"
+                                      value={rescheduleTime}
+                                      onChange={(e) =>
+                                        setRescheduleTime(e.target.value)
+                                      }
+                                    />
+                                  </label>
+                                  <label className="block text-xs font-medium text-slate-600">
+                                    Note to renter (optional)
+                                    <textarea
+                                      className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-white"
+                                      rows={2}
+                                      value={rescheduleNote}
+                                      onChange={(e) =>
+                                        setRescheduleNote(e.target.value)
+                                      }
+                                      placeholder="Add any context or instructions…"
+                                    />
+                                  </label>
+                                  <div className="flex justify-end gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                                      onClick={() => {
+                                        setEditingInquiryId(null);
+                                        setEditMode(null);
+                                        setRescheduleTime("");
+                                        setRescheduleNote("");
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                                      disabled={!rescheduleTime}
+                                      onClick={async () => {
+                                        if (!rescheduleTime) return;
+                                        await updateInquiry(inq.id, {
+                                          status: "reschedule_proposed",
+                                          landlord_suggested_time:
+                                            rescheduleTime,
+                                          landlord_message:
+                                            rescheduleNote.trim() || null,
+                                        });
+                                        setEditingInquiryId(null);
+                                        setEditMode(null);
+                                        setRescheduleTime("");
+                                        setRescheduleNote("");
+                                      }}
+                                    >
+                                      Send proposal
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <label className="block text-xs font-medium text-slate-600">
+                                    Reason for declining (optional)
+                                    <textarea
+                                      className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-white"
+                                      rows={2}
+                                      value={rescheduleNote}
+                                      onChange={(e) =>
+                                        setRescheduleNote(e.target.value)
+                                      }
+                                      placeholder="Briefly explain why you’re declining, if you’d like."
+                                    />
+                                  </label>
+                                  <div className="flex justify-end gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                                      onClick={() => {
+                                        setEditingInquiryId(null);
+                                        setEditMode(null);
+                                        setRescheduleTime("");
+                                        setRescheduleNote("");
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700"
+                                      onClick={async () => {
+                                        await updateInquiry(inq.id, {
+                                          status: "declined",
+                                          landlord_message:
+                                            rescheduleNote.trim() || null,
+                                          resolved_at:
+                                            new Date().toISOString(),
+                                        });
+                                        setEditingInquiryId(null);
+                                        setEditMode(null);
+                                        setRescheduleTime("");
+                                        setRescheduleNote("");
+                                      }}
+                                    >
+                                      Confirm decline
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         </section>
 

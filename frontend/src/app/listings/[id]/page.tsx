@@ -5,7 +5,8 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabaseClient";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ListingDetails = {
   id: string;
@@ -33,11 +34,24 @@ function formatMoney(value: number | null) {
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const router = useRouter();
+  const { user } = useAuth();
 
   const [listing, setListing] = useState<ListingDetails | null>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  const [contactOpen, setContactOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [contactMessage, setContactMessage] = useState("");
+  const [tourMessage, setTourMessage] = useState("");
+  const [tourTime, setTourTime] = useState("");
+  const [submitting, setSubmitting] = useState<"contact" | "tour" | null>(
+    null,
+  );
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -122,6 +136,68 @@ export default function ListingPage() {
       cancelled = true;
     };
   }, [id]);
+
+  function ensureAuthenticated(action: "contact" | "tour") {
+    if (!user) {
+      const target = `/signin?redirect=/listings/${id}&action=${action}`;
+      router.push(target);
+      return false;
+    }
+    return true;
+  }
+
+  async function submitInquiry(type: "contact" | "tour") {
+    if (!listing || !id) return;
+    if (!ensureAuthenticated(type) || !user) return;
+
+    setSubmitting(type);
+    setFeedback(null);
+    setError(null);
+
+    try {
+      const message =
+        type === "contact"
+          ? contactMessage.trim()
+          : tourMessage.trim();
+      const preferred_time = type === "tour" ? tourTime.trim() : null;
+
+      const { error: insertError } = await supabase
+        .from("listing_inquiries")
+        .insert({
+          listing_id: listing.id,
+          renter_id: user.id,
+          type,
+          message: message || null,
+          preferred_time,
+        });
+
+      if (insertError) {
+        setError(
+          insertError.message ||
+            "Could not send your request. Please try again.",
+        );
+        return;
+      }
+
+      setFeedback(
+        type === "contact"
+          ? "Your interest has been recorded. The landlord will be able to review it."
+          : "Your tour request has been recorded. The landlord will be able to review it.",
+      );
+      if (type === "contact") {
+        setContactOpen(false);
+        setContactMessage("");
+      } else {
+        setTourOpen(false);
+        setTourMessage("");
+        setTourTime("");
+      }
+    } catch (_err) {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting((current) => (current === type ? null : current));
+    }
+  }
 
   if (loading) {
     return (
@@ -333,13 +409,111 @@ export default function ListingPage() {
                 </h3>
 
                 <div className="space-y-4">
-                  <button className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm">
+                  <button
+                    className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
+                    onClick={() => {
+                      setFeedback(null);
+                      setError(null);
+                      if (!ensureAuthenticated("contact")) return;
+                      setContactOpen((open) => !open);
+                      setTourOpen(false);
+                    }}
+                    disabled={submitting === "contact" || submitting === "tour"}
+                  >
                     Contact Landlord
                   </button>
-                  <button className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors">
+                  <button
+                    className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                    onClick={() => {
+                      setFeedback(null);
+                      setError(null);
+                      if (!ensureAuthenticated("tour")) return;
+                      setTourOpen((open) => !open);
+                      setContactOpen(false);
+                    }}
+                    disabled={submitting === "contact" || submitting === "tour"}
+                  >
                     Schedule a Tour
                   </button>
                 </div>
+
+                {(contactOpen || tourOpen) && (
+                  <div className="mt-5 space-y-4 border-t border-slate-100 pt-4">
+                    {contactOpen && (
+                      <div className="space-y-3">
+                        <p className="text-sm text-slate-600">
+                          Send a short note about your interest in this space.
+                        </p>
+                        <textarea
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                          rows={3}
+                          placeholder="Tell the landlord what you're looking for..."
+                          value={contactMessage}
+                          onChange={(e) => setContactMessage(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => submitInquiry("contact")}
+                          className="w-full inline-flex justify-center items-center rounded-lg bg-slate-900 text-white py-2.5 px-4 text-sm font-medium hover:bg-slate-800 transition-colors disabled:opacity-60"
+                          disabled={submitting === "contact"}
+                        >
+                          {submitting === "contact"
+                            ? "Sending..."
+                            : "Send to Landlord"}
+                        </button>
+                      </div>
+                    )}
+
+                    {tourOpen && (
+                      <div className="space-y-3">
+                        <p className="text-sm text-slate-600">
+                          Request a tour and suggest times that work for you.
+                        </p>
+                        <label className="block text-xs font-medium text-slate-600">
+                          Preferred date &amp; time
+                          <input
+                            type="datetime-local"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                            value={tourTime}
+                            onChange={(e) => setTourTime(e.target.value)}
+                          />
+                        </label>
+                        <textarea
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                          rows={3}
+                          placeholder="Add any details about your availability or questions..."
+                          value={tourMessage}
+                          onChange={(e) => setTourMessage(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => submitInquiry("tour")}
+                          className="w-full inline-flex justify-center items-center rounded-lg bg-white text-slate-900 border border-slate-300 py-2.5 px-4 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
+                          disabled={submitting === "tour"}
+                        >
+                          {submitting === "tour"
+                            ? "Sending request..."
+                            : "Send Tour Request"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(feedback || error) && (
+                  <div className="mt-4 text-sm">
+                    {feedback && (
+                      <p className="text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                        {feedback}
+                      </p>
+                    )}
+                    {error && (
+                      <p className="text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-2">
+                        {error}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-3">

@@ -19,7 +19,7 @@ export default function LandlordDashboardPage() {
     setError(null);
     supabase
       .from("listings")
-      .select("id, title, city, state, property_type")
+      .select("id, title, city, state, property_type, status")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
@@ -30,6 +30,15 @@ export default function LandlordDashboardPage() {
   }, [user]);
 
   const handleDelete = async (id: string) => {
+    const listing = listings.find((l) => l.id === id);
+    if (!listing) {
+      setError("Listing not found.");
+      return;
+    }
+    if (listing.status !== "Available") {
+      setError("Only listings with status 'Available' can be deleted.");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this listing?")) return;
     setError(null);
     const { error } = await supabase.from("listings").delete().eq("id", id);
@@ -181,6 +190,8 @@ export default function LandlordDashboardPage() {
                     <button
                       onClick={() => handleDelete(listing.id)}
                       className="ml-4 px-3 py-1.5 rounded-md border border-red-200 bg-red-50 text-xs text-red-700 hover:bg-red-100"
+                      disabled={listing.status !== "Available"}
+                      title={listing.status !== "Available" ? "Only available listings can be deleted" : "Delete"}
                     >
                       Delete
                     </button>

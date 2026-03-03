@@ -31,8 +31,10 @@ type FilterState = {
 
 export default function BrowsePage() {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [loadingSaved, setLoadingSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<ListingView[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
@@ -46,7 +48,53 @@ export default function BrowsePage() {
     maxDeposit: "",
   });
 
-  const handleSave = async (listingId: string) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSaved() {
+      setError(null);
+
+      if (!userId) {
+        setSavedIds(new Set());
+        return;
+      }
+
+      setLoadingSaved(true);
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("saved_listings")
+          .select("property_id")
+          .eq("user_id", userId);
+
+        if (fetchError) {
+          if (!cancelled) {
+            setError(fetchError.message ?? "Unable to load saved spaces.");
+          }
+          return;
+        }
+
+        const next = new Set<string>();
+        (data ?? []).forEach((r: any) => {
+          if (typeof r?.property_id === "string" && r.property_id.length > 0) {
+            next.add(r.property_id);
+          }
+        });
+
+        if (!cancelled) setSavedIds(next);
+      } catch (_err) {
+        if (!cancelled) setError("Unable to load saved spaces.");
+      } finally {
+        if (!cancelled) setLoadingSaved(false);
+      }
+    }
+
+    loadSaved();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const handleToggleSave = async (property_id: string) => {
     setError(null);
 
     if (!user) {
@@ -54,32 +102,54 @@ export default function BrowsePage() {
       return;
     }
 
-    // Avoid duplicate insert calls if already saved in this session
-    if (savedIds.has(listingId)) {
-      return;
-    }
+    const currentlySaved = savedIds.has(property_id);
 
-    setSavingId(listingId);
+    setSavingId(property_id);
     try {
-      const { error: insertError } = await supabase
-        .from("saved_listings")
-        .insert({
-          user_id: user.id,
-          listing_id: listingId,
+      if (currentlySaved) {
+        const { error: deleteError } = await supabase
+          .from("saved_listings")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("property_id", property_id);
+
+        if (deleteError) {
+          setError(deleteError.message ?? "Unable to remove this saved space.");
+          return;
+        }
+
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(property_id);
+          return next;
         });
+      } else {
+        const { error: insertError } = await supabase
+          .from("saved_listings")
+          .insert({
+            user_id: user.id,
+            property_id: property_id,
+          });
 
-      if (insertError) {
-        setError(insertError.message ?? "Unable to save this space.");
-        return;
+        if (insertError) {
+          const msg = insertError.message ?? "";
+          const isDuplicate =
+            insertError.code === "23505" ||
+            msg.toLowerCase().includes("duplicate");
+          if (!isDuplicate) {
+            setError(insertError.message ?? "Unable to save this space.");
+            return;
+          }
+        }
+
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.add(property_id);
+          return next;
+        });
       }
-
-      setSavedIds((prev) => {
-        const next = new Set(prev);
-        next.add(listingId);
-        return next;
-      });
     } catch (_err) {
-      setError("Something went wrong while saving. Please try again.");
+      setError("Something went wrong. Please try again.");
     } finally {
       setSavingId(null);
     }
@@ -401,14 +471,19 @@ export default function BrowsePage() {
                     <div className="mt-4 flex justify-between items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => handleSave(listing.id)}
-                        disabled={isSaving || isSaved}
-                        className="inline-flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:opacity-60 disabled:cursor-default transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                        aria-pressed={isSaved}
+                        onClick={() => handleToggleSave(listing.id)}
+                        disabled={isSaving || loadingSaved}
+                        className={`inline-flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20 disabled:opacity-60 disabled:cursor-default ${
+                          isSaved
+                            ? "border-[var(--brand)]/30 text-[var(--brand)] hover:border-[var(--brand)] hover:bg-[var(--brand)]/5"
+                            : "border-slate-200 text-slate-700 hover:border-[var(--brand)] hover:text-[var(--brand)]"
+                        }`}
                       >
-                        {isSaved
-                          ? "Saved"
-                          : isSaving
-                            ? "Saving..."
+                        {isSaving
+                          ? "Saving..."
+                          : isSaved
+                            ? "Unsave"
                             : "Save space"}
                       </button>
                       <Link

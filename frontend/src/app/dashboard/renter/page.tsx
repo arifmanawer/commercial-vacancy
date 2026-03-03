@@ -1,8 +1,97 @@
+/* eslint-disable react-hooks/rules-of-hooks */
+"use client";
+
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function RenterDashboardPage() {
+  const { user } = useAuth();
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [loadingInquiries, setLoadingInquiries] = useState(false);
+  const [inquiriesError, setInquiriesError] = useState<string | null>(null);
+  const [listings, setListings] = useState<any[]>([]);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const updateInquiry = async (id: string, updates: Record<string, unknown>) => {
+    setUpdatingId(id);
+    setInquiriesError(null);
+    try {
+      const { error } = await supabase
+        .from("listing_inquiries")
+        .update(updates)
+        .eq("id", id);
+      if (error) {
+        setInquiriesError(
+          error.message || "Could not update this request. Please try again.",
+        );
+        return;
+      }
+      setInquiries((prev) =>
+        prev.map((inq) => (inq.id === id ? { ...inq, ...updates } : inq)),
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    async function load() {
+      setLoadingInquiries(true);
+      setInquiriesError(null);
+      const { data: inqRows, error } = await supabase
+        .from("listing_inquiries")
+        .select(
+          "id, listing_id, type, status, message, preferred_time, landlord_message, landlord_suggested_time, created_at, resolved_at",
+        )
+        .order("created_at", { ascending: false });
+
+      if (cancelled) return;
+
+      if (error) {
+        setInquiriesError(
+          error.message ||
+            "Could not load your interest and tour requests.",
+        );
+        setInquiries([]);
+        setLoadingInquiries(false);
+        return;
+      }
+
+      const safeInquiries = inqRows || [];
+      setInquiries(safeInquiries);
+
+      const ids = safeInquiries.map((i: any) => i.listing_id);
+      if (!ids.length) {
+        setListings([]);
+        setLoadingInquiries(false);
+        return;
+      }
+
+      const { data: listingRows } = await supabase
+        .from("listings")
+        .select("id, title, city, state, property_type")
+        .in("id", ids);
+
+      if (!cancelled) {
+        setListings(listingRows || []);
+        setLoadingInquiries(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
@@ -41,7 +130,9 @@ export default function RenterDashboardPage() {
                 Upcoming booking
               </p>
               <p className="text-sm font-semibold text-slate-900">
-                No confirmed bookings
+                {inquiries.filter((i) => i.status === "accepted").length > 0
+                  ? `${inquiries.filter((i) => i.status === "accepted").length} accepted request(s)`
+                  : "No confirmed bookings"}
               </p>
               <p className="text-xs text-slate-500">
                 Once you book a space, it will appear here.
@@ -62,7 +153,9 @@ export default function RenterDashboardPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Messages
               </p>
-              <p className="text-2xl font-bold text-slate-900">0</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {inquiries.length}
+              </p>
               <p className="text-xs text-slate-500">
                 Conversations with hosts will show up here.
               </p>
@@ -80,10 +173,10 @@ export default function RenterDashboardPage() {
                 id="bookings-heading"
                 className="text-lg font-semibold text-slate-900"
               >
-                Upcoming bookings
+                Requests & bookings
               </h2>
               <p className="text-sm text-slate-600">
-                View and manage your reservations.
+                View the status of your contact and tour requests.
               </p>
             </div>
             <button
@@ -94,10 +187,125 @@ export default function RenterDashboardPage() {
             </button>
           </div>
 
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-            You don&apos;t have any upcoming bookings yet. When you reserve a
-            space, the details will appear here.
-          </div>
+          {loadingInquiries ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              Loading your requests…
+            </div>
+          ) : inquiriesError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">
+              {inquiriesError}
+            </div>
+          ) : inquiries.length === 0 ? (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              You haven&apos;t contacted any landlords yet. When you send
+              interest or tour requests from a listing, they will appear here.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {inquiries.map((inq) => {
+                const listing = listings.find(
+                  (l) => l.id === inq.listing_id,
+                );
+                const statusLabel =
+                  inq.status === "accepted"
+                    ? "Accepted"
+                    : inq.status === "declined"
+                    ? "Declined"
+                    : inq.status === "reschedule_proposed"
+                    ? "Reschedule proposed"
+                    : "Pending";
+                const statusColorClasses =
+                  inq.status === "accepted"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    : inq.status === "declined"
+                    ? "bg-red-50 text-red-700 border-red-100"
+                    : inq.status === "reschedule_proposed"
+                    ? "bg-amber-50 text-amber-700 border-amber-100"
+                    : "bg-slate-50 text-slate-700 border-slate-200";
+                return (
+                  <li key={inq.id} className="py-3 flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {inq.type === "tour" ? "Tour request" : "Contact"}
+                        </span>
+                        <span className="text-sm font-medium text-slate-900">
+                          {listing?.title ?? "Listing"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs text-slate-500">
+                          {new Date(inq.created_at).toLocaleString()}
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusColorClasses}`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </div>
+                    {inq.preferred_time && (
+                      <p className="text-xs text-slate-600">
+                        Your preferred time:{" "}
+                        {new Date(inq.preferred_time).toLocaleString()}
+                      </p>
+                    )}
+                    {inq.message && (
+                      <p className="text-xs text-slate-700">
+                        You said: “{inq.message}”
+                      </p>
+                    )}
+                    {inq.landlord_suggested_time && (
+                      <p className="text-xs text-slate-600">
+                        Host&apos;s suggested time:{" "}
+                        {new Date(
+                          inq.landlord_suggested_time,
+                        ).toLocaleString()}
+                      </p>
+                    )}
+                    {inq.landlord_message && (
+                      <p className="text-xs text-slate-600">
+                        Host note: “{inq.landlord_message}”
+                      </p>
+                    )}
+                    {inq.status === "reschedule_proposed" && inq.landlord_suggested_time && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                          disabled={updatingId === inq.id}
+                          onClick={() =>
+                            updateInquiry(inq.id, {
+                              status: "accepted",
+                              preferred_time: inq.landlord_suggested_time,
+                              resolved_at: new Date().toISOString(),
+                            })
+                          }
+                        >
+                          {updatingId === inq.id
+                            ? "Accepting..."
+                            : "Accept proposed time"}
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-60"
+                          disabled={updatingId === inq.id}
+                          onClick={() =>
+                            updateInquiry(inq.id, {
+                              status: "declined",
+                              resolved_at: new Date().toISOString(),
+                            })
+                          }
+                        >
+                          {updatingId === inq.id ? "Updating..." : "Decline"}
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">

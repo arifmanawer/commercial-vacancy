@@ -1,9 +1,54 @@
+"use client";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function LandlordDashboardPage() {
+  const { user } = useAuth();
+  const [listings, setListings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    supabase
+      .from("listings")
+      .select("id, title, city, state, property_type, status")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) setError(error.message);
+        setListings(data || []);
+        setLoading(false);
+      });
+  }, [user]);
+
+  const handleDelete = async (id: string) => {
+    const listing = listings.find((l) => l.id === id);
+    if (!listing) {
+      setError("Listing not found.");
+      return;
+    }
+    if (listing.status !== "Available") {
+      setError("Only listings with status 'Available' can be deleted.");
+      return;
+    }
+    if (!confirm("Are you sure you want to delete this listing?")) return;
+    setError(null);
+    const { error } = await supabase.from("listings").delete().eq("id", id);
+    if (error) {
+      setError(error.message);
+    } else {
+      setListings((prev) => prev.filter((l) => l.id !== id));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
@@ -124,10 +169,36 @@ export default function LandlordDashboardPage() {
               </button>
             </div>
 
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              You don&apos;t have any listings yet. Click &quot;Add new
-              listing&quot; to publish your first space.
-            </div>
+            {loading ? (
+              <div className="text-center text-slate-500 py-6">Loading…</div>
+            ) : error ? (
+              <div className="text-center text-red-500 py-6">{error}</div>
+            ) : listings.length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                You don&apos;t have any listings yet. Click &quot;Add new listing&quot; to publish your first space.
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {listings.map((listing) => (
+                  <li key={listing.id} className="py-4 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-slate-900">{listing.title}</div>
+                      <div className="text-xs text-slate-500">
+                        {listing.city}, {listing.state} &middot; {listing.property_type}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(listing.id)}
+                      className="ml-4 px-3 py-1.5 rounded-md border border-red-200 bg-red-50 text-xs text-red-700 hover:bg-red-100"
+                      disabled={listing.status !== "Available"}
+                      title={listing.status !== "Available" ? "Only available listings can be deleted" : "Delete"}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section

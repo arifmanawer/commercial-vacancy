@@ -3,6 +3,7 @@ import userRoutes from './users';
 import authEventsRoutes from './authEvents';
 import contractorRoutes from './contractors';
 import profileRoutes from './profiles';
+import listingRoutes from './listings';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.use('/users', userRoutes);
 router.use('/auth-events', authEventsRoutes);
 router.use('/contractors', contractorRoutes);
 router.use('/profiles', profileRoutes);
+router.use('/listings', listingRoutes);
 
 // Default API info route
 router.get('/', (_req, res) => {

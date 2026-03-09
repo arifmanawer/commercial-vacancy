@@ -241,12 +241,12 @@ export default function LandlordDashboardPage() {
                   Manage the spaces you&apos;ve made available for rent.
                 </p>
               </div>
-              <button
-                type="button"
+              <Link
+                href="/list"
                 className="hidden sm:inline-flex items-center rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
               >
                 Add new listing
-              </button>
+              </Link>
             </div>
 
             {loading ? (

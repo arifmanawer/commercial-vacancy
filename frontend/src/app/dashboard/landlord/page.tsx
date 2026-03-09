@@ -33,10 +33,17 @@ export default function LandlordDashboardPage() {
       setInquiries([]);
       setInquiriesError(null);
 
+      const userId = user?.id;
+      if (!userId) {
+        setListings([]);
+        setLoading(false);
+        return;
+      }
+
       const { data: listingRows, error: listingError } = await supabase
         .from("listings")
         .select("id, title, city, state, property_type, status")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
       if (cancelled) return;
@@ -260,21 +267,41 @@ export default function LandlordDashboardPage() {
             ) : (
               <ul className="divide-y divide-slate-100">
                 {listings.map((listing) => (
-                  <li key={listing.id} className="py-4 flex items-center justify-between">
+                  <li
+                    key={listing.id}
+                    className="py-4 flex items-center justify-between gap-4"
+                  >
                     <div>
-                      <div className="font-semibold text-slate-900">{listing.title}</div>
+                      <div className="font-semibold text-slate-900">
+                        {listing.title}
+                      </div>
                       <div className="text-xs text-slate-500">
-                        {listing.city}, {listing.state} &middot; {listing.property_type}
+                        {listing.city}, {listing.state} &middot;{" "}
+                        {listing.property_type}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDelete(listing.id)}
-                      className="ml-4 px-3 py-1.5 rounded-md border border-red-200 bg-red-50 text-xs text-red-700 hover:bg-red-100"
-                      disabled={listing.status !== "Available"}
-                      title={listing.status !== "Available" ? "Only available listings can be deleted" : "Delete"}
-                    >
-                      Delete
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {listing.status === "Available" && (
+                        <Link
+                          href={`/dashboard/landlord/listings/${listing.id}/edit`}
+                          className="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-xs text-slate-700 hover:bg-slate-50"
+                        >
+                          Edit
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => handleDelete(listing.id)}
+                        className="px-3 py-1.5 rounded-md border border-red-200 bg-red-50 text-xs text-red-700 hover:bg-red-100 disabled:opacity-60"
+                        disabled={listing.status !== "Available"}
+                        title={
+                          listing.status !== "Available"
+                            ? "Only available listings can be deleted"
+                            : "Delete"
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

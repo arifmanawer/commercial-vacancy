@@ -72,7 +72,7 @@ export default function ContractorDashboardPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/login");
+      router.replace("/signin?redirect=/dashboard/contractor");
     }
   }, [loading, user, router]);
 

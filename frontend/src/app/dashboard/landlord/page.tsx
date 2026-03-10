@@ -21,6 +21,9 @@ export default function LandlordDashboardPage() {
   const [editMode, setEditMode] = useState<"reschedule" | "decline" | null>(
     null,
   );
+  const [contractorJobs, setContractorJobs] = useState<any[]>([]);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -83,6 +86,28 @@ export default function LandlordDashboardPage() {
         setInquiries(inquiryRows || []);
       }
       setLoadingInquiries(false);
+
+      setLoadingJobs(true);
+      setJobsError(null);
+      const { data: jobsRows, error: jobsErr } = await supabase
+        .from("contractor_jobs")
+        .select(
+          "id, listing_id, title, status, budget, preferred_date, created_at",
+        )
+        .eq("landlord_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (cancelled) return;
+
+      if (jobsErr) {
+        setJobsError(
+          jobsErr.message || "Could not load contractor jobs.",
+        );
+        setContractorJobs([]);
+      } else {
+        setContractorJobs(jobsRows || []);
+      }
+      setLoadingJobs(false);
     }
 
     loadData();
@@ -191,11 +216,11 @@ export default function LandlordDashboardPage() {
 
             <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Upcoming payouts
+                Contractor jobs
               </p>
               <p className="text-2xl font-bold text-slate-900">$0.00</p>
               <p className="text-xs text-slate-500">
-                Once bookings are completed, your payouts will appear here.
+                Track requests, accepted work, and completed jobs.
               </p>
             </div>
           </div>
@@ -577,27 +602,98 @@ export default function LandlordDashboardPage() {
         </section>
 
         <section
-          aria-labelledby="payouts-heading"
+          aria-labelledby="contractor-jobs-heading"
           className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
         >
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2
-                id="payouts-heading"
+                id="contractor-jobs-heading"
                 className="text-lg font-semibold text-slate-900"
               >
-                Payouts
+                Contractor jobs
               </h2>
               <p className="text-sm text-slate-600">
-                Track completed bookings and payout history.
+                See the status of work you&apos;ve requested from contractors.
               </p>
             </div>
           </div>
 
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-            No payouts yet. Once bookings are completed and processed,
-            you&apos;ll see your payout history here.
-          </div>
+          {loadingJobs ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              Loading contractor jobs…
+            </div>
+          ) : jobsError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">
+              {jobsError}
+            </div>
+          ) : contractorJobs.length === 0 ? (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              You haven&apos;t requested any contractor jobs yet. When you send
+              job requests from the Contractors page, you&apos;ll see them
+              listed here.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {contractorJobs.map((job) => {
+                const listing = listings.find(
+                  (l) => l.id === job.listing_id,
+                );
+                const status =
+                  job.status === "accepted"
+                    ? "Accepted"
+                    : job.status === "declined"
+                    ? "Declined"
+                    : job.status === "completed"
+                    ? "Completed"
+                    : "Requested";
+                const statusClasses =
+                  job.status === "accepted"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    : job.status === "declined"
+                    ? "bg-red-50 text-red-700 border-red-100"
+                    : job.status === "completed"
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-slate-50 text-slate-700 border-slate-200";
+                return (
+                  <li key={job.id} className="py-3 flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-slate-900">
+                          {job.title}
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          {listing?.title
+                            ? `${listing.title} — ${listing.city}, ${listing.state}`
+                            : "Listing"}
+                        </span>
+                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                          {job.budget != null && (
+                            <span>Budget: ${job.budget.toFixed(0)}</span>
+                          )}
+                          {job.preferred_date && (
+                            <span>
+                              Preferred:{" "}
+                              {new Date(job.preferred_date).toLocaleString()}
+                            </span>
+                          )}
+                          <span>
+                            Created:{" "}
+                            {new Date(job.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses}`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </main>
 

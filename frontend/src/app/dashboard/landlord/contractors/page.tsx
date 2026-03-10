@@ -218,10 +218,10 @@ export default function LandlordContractorsPage() {
     setJobBudget("");
     setJobPreferredDate("");
     setJobError(null);
-    setJobSuccess(null);
   };
 
   const handleCreateJobClick = (contractor: Contractor) => {
+    setJobSuccess(null);
     setCreatingJobFor(contractor);
     resetJobForm();
   };
@@ -267,7 +267,6 @@ export default function LandlordContractorsPage() {
 
       setJobSuccess("Job request sent to contractor.");
       resetJobForm();
-      setCreatingJobFor(null);
     } catch (err) {
       setJobError(
         err instanceof Error ? err.message : "Failed to create contractor job",

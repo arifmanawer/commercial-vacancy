@@ -7,7 +7,12 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
-import type { Contractor, ContractorAvailabilityStatus } from "@/types/database";
+import type {
+  Contractor,
+  ContractorAvailabilityStatus,
+  ContractorJob,
+  ContractorJobStatus,
+} from "@/types/database";
 
 type ServiceOption =
   | "Painting"
@@ -34,6 +39,18 @@ interface ApiContractorResponse {
   error?: string;
 }
 
+interface ApiContractorJobsResponse {
+  success: boolean;
+  data: ContractorJob[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  error?: string;
+}
+
 export default function ContractorDashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -49,6 +66,9 @@ export default function ContractorDashboardPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [jobs, setJobs] = useState<ContractorJob[]>([]);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -108,6 +128,41 @@ export default function ContractorDashboardPage() {
     fetchProfile();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchJobs = async () => {
+      setJobsError(null);
+      try {
+        const res = await fetch(
+          `${getApiUrl()}/api/contractor-jobs?role=contractor`,
+          {
+            headers: {
+              "X-User-Id": user.id,
+            },
+          },
+        );
+        const body = (await res.json().catch(() => null)) as
+          | ApiContractorJobsResponse
+          | { error?: string }
+          | null;
+        if (!res.ok || !body || !("success" in body) || !body.success) {
+          throw new Error(
+            (body && "error" in body && body.error) ||
+              "Failed to load contractor jobs",
+          );
+        }
+        setJobs(body.data || []);
+      } catch (err) {
+        setJobsError(
+          err instanceof Error ? err.message : "Failed to load contractor jobs",
+        );
+      }
+    };
+
+    fetchJobs();
+  }, [user]);
+
   const toggleService = (service: ServiceOption) => {
     setSelectedServices((prev) =>
       prev.includes(service)
@@ -163,6 +218,66 @@ export default function ContractorDashboardPage() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const updateJobStatus = async (
+    jobId: string,
+    updates: Partial<Pick<ContractorJob, "status" | "contractor_note">>,
+  ) => {
+    if (!user) return;
+    setUpdatingJobId(jobId);
+    setJobsError(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/contractor-jobs/${jobId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify(updates),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: ContractorJob; error?: string }
+        | null;
+      if (!res.ok || !body?.success || !body.data) {
+        throw new Error(body?.error || "Failed to update job");
+      }
+      setJobs((prev) =>
+        prev.map((job) => (job.id === jobId ? body.data! : job)),
+      );
+    } catch (err) {
+      setJobsError(
+        err instanceof Error ? err.message : "Failed to update job",
+      );
+    } finally {
+      setUpdatingJobId(null);
+    }
+  };
+
+  const statusLabel = (status: ContractorJobStatus) => {
+    switch (status) {
+      case "accepted":
+        return "Accepted";
+      case "declined":
+        return "Declined";
+      case "completed":
+        return "Completed";
+      default:
+        return "Requested";
+    }
+  };
+
+  const statusClasses = (status: ContractorJobStatus) => {
+    switch (status) {
+      case "accepted":
+        return "bg-emerald-50 text-emerald-700 border-emerald-100";
+      case "declined":
+        return "bg-red-50 text-red-700 border-red-100";
+      case "completed":
+        return "bg-slate-900 text-white border-slate-900";
+      default:
+        return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
 
@@ -368,6 +483,129 @@ export default function ContractorDashboardPage() {
               </button>
             </div>
           </form>
+        </section>
+
+        <section
+          aria-labelledby="jobs-heading"
+          className="space-y-4 rounded-lg border border-slate-200 bg-white p-5"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2
+                id="jobs-heading"
+                className="text-lg font-semibold text-slate-900"
+              >
+                Job requests
+              </h2>
+              <p className="text-sm text-slate-600">
+                Review new job requests from landlords and update their status.
+              </p>
+            </div>
+          </div>
+
+          {jobsError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {jobsError}
+            </div>
+          )}
+
+          {jobs.length === 0 && !jobsError ? (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              You don&apos;t have any job requests yet. When landlords request
+              work, it will appear here.
+            </div>
+          ) : null}
+
+          {jobs.length > 0 && (
+            <ul className="divide-y divide-slate-100">
+              {jobs.map((job) => (
+                <li key={job.id} className="py-3 flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-slate-900">
+                        {job.title}
+                      </span>
+                      {job.description && (
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          {job.description}
+                        </p>
+                      )}
+                      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                        {job.budget != null && (
+                          <span>Budget: ${job.budget.toFixed(0)}</span>
+                        )}
+                        {job.preferred_date && (
+                          <span>
+                            Preferred:{" "}
+                            {new Date(job.preferred_date).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses(
+                        job.status,
+                      )}`}
+                    >
+                      {statusLabel(job.status)}
+                    </span>
+                  </div>
+                  {job.landlord_note && (
+                    <p className="text-xs text-slate-600">
+                      Landlord note: “{job.landlord_note}”
+                    </p>
+                  )}
+                  {job.contractor_note && (
+                    <p className="text-xs text-slate-600">
+                      Your note: “{job.contractor_note}”
+                    </p>
+                  )}
+                  {job.status === "requested" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={updatingJobId === job.id}
+                        onClick={() =>
+                          updateJobStatus(job.id, { status: "accepted" })
+                        }
+                        className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        {updatingJobId === job.id
+                          ? "Updating..."
+                          : "Accept job"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingJobId === job.id}
+                        onClick={() =>
+                          updateJobStatus(job.id, { status: "declined" })
+                        }
+                        className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100 disabled:opacity-60"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                  {job.status === "accepted" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={updatingJobId === job.id}
+                        onClick={() =>
+                          updateJobStatus(job.id, { status: "completed" })
+                        }
+                        className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        {updatingJobId === job.id
+                          ? "Updating..."
+                          : "Mark completed"}
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </main>
 

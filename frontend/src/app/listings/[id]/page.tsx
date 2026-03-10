@@ -7,6 +7,15 @@ import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabaseClient";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiUrl } from "@/lib/api";
+import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
+
+type LandlordPublicInfo = {
+  id: string;
+  email: string | null;
+  is_landlord: boolean;
+  created_at: string | null;
+};
 
 type ListingDetails = {
   id: string;
@@ -20,6 +29,7 @@ type ListingDetails = {
   rental_type: string | null;
   security_deposit: number | null;
   images: string[];
+  landlord_user_id: string | null;
 };
 
 function formatMoney(value: number | null) {
@@ -52,6 +62,16 @@ export default function ListingPage() {
   );
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [landlord, setLandlord] = useState<LandlordPublicInfo | null>(null);
+  const [landlordLoading, setLandlordLoading] = useState(false);
+  const [landlordError, setLandlordError] = useState<string | null>(null);
+  const [mapCenter, setMapCenter] =
+    useState<google.maps.LatLngLiteral | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+
+  const { isLoaded: mapsLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
+  });
 
   useEffect(() => {
     if (!id) {
@@ -69,7 +89,9 @@ export default function ListingPage() {
       try {
         const { data: listingRow, error: listingError } = await supabase
           .from("listings")
-          .select("id, title, description, address, city, state, property_type")
+          .select(
+            "id, title, description, address, city, state, property_type, user_id",
+          )
           .eq("id", id)
           .maybeSingle();
 
@@ -121,8 +143,14 @@ export default function ListingPage() {
             rental_type: pricing?.rental_type ?? null,
             security_deposit: pricing?.security_deposit ?? null,
             images,
+            landlord_user_id:
+              typeof listingRow.user_id === "string"
+                ? listingRow.user_id
+                : null,
           });
           setActiveImage(0);
+          setLandlord(null);
+          setLandlordError(null);
         }
       } catch (_err) {
         if (!cancelled) setNotFound(true);
@@ -136,6 +164,84 @@ export default function ListingPage() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setLandlord(null);
+    setLandlordError(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !listing) return;
+
+    let cancelled = false;
+
+    async function loadLandlord() {
+      setLandlordLoading(true);
+      setLandlordError(null);
+
+      try {
+        const res = await fetch(`${getApiUrl()}/api/listings/${id}/landlord`);
+        const body = (await res.json().catch(() => null)) as
+          | { success?: boolean; data?: LandlordPublicInfo; error?: string }
+          | null;
+
+        if (!res.ok || !body?.success || !body.data) {
+          if (!cancelled) {
+            setLandlordError(
+              body?.error || "Unable to load landlord details.",
+            );
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setLandlord(body.data);
+        }
+      } catch (_err) {
+        if (!cancelled) {
+          setLandlordError("Unable to load landlord details.");
+        }
+      } finally {
+        if (!cancelled) setLandlordLoading(false);
+      }
+    }
+
+    loadLandlord();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, listing]);
+
+  useEffect(() => {
+    if (!mapsLoaded || !listing) return;
+    if (!listing.address && !listing.city && !listing.state) return;
+
+    const parts = [
+      listing.address ?? "",
+      listing.city ?? "",
+      listing.state ?? "",
+    ]
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
+    if (!parts.length) return;
+
+    const addressString = parts.join(", ");
+
+    const geocoder = new google.maps.Geocoder();
+    setMapError(null);
+
+    geocoder.geocode({ address: addressString }, (results, status) => {
+      if (status === "OK" && results && results[0]?.geometry?.location) {
+        const loc = results[0].geometry.location;
+        setMapCenter({ lat: loc.lat(), lng: loc.lng() });
+      } else {
+        setMapError("Map is unavailable for this address.");
+      }
+    });
+  }, [mapsLoaded, listing]);
 
   function ensureAuthenticated(action: "contact" | "tour") {
     if (!user) {
@@ -388,13 +494,35 @@ export default function ListingPage() {
               </p>
             </section>
 
-            {/* Map Placeholder */}
+            {/* Map */}
             <section>
               <h2 className="text-xl font-semibold text-slate-900 mb-3">
                 Location
               </h2>
-              <div className="h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 border border-slate-200">
-                Map Placeholder (Integration coming later)
+              <div className="h-64 rounded-xl border border-slate-200 overflow-hidden">
+                {!mapsLoaded ? (
+                  <div className="w-full h-full bg-slate-50 flex items-center justify-center text-sm text-slate-500">
+                    Loading map…
+                  </div>
+                ) : mapCenter ? (
+                  <GoogleMap
+                    center={mapCenter}
+                    zoom={14}
+                    mapContainerStyle={{ width: "100%", height: "100%" }}
+                    options={{
+                      disableDefaultUI: true,
+                      zoomControl: true,
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                    }}
+                  >
+                    <Marker position={mapCenter} />
+                  </GoogleMap>
+                ) : (
+                  <div className="w-full h-full bg-slate-50 flex items-center justify-center text-sm text-slate-500">
+                    {mapError || "Map is unavailable for this address."}
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -515,6 +643,16 @@ export default function ListingPage() {
                   </div>
                 )}
 
+                {landlord && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    Your messages are delivered to{" "}
+                    <span className="font-medium text-slate-700">
+                      {landlord.email ?? "this listing’s landlord"}
+                    </span>
+                    .
+                  </p>
+                )}
+
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-3">
                     Listed by
@@ -523,10 +661,16 @@ export default function ListingPage() {
                     <div className="w-10 h-10 rounded-full bg-slate-200" />
                     <div>
                       <p className="text-sm font-medium text-slate-900">
-                        Landlord
+                        {landlord?.email || "Landlord"}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Contact info coming soon
+                        {landlordLoading
+                          ? "Loading contact details…"
+                          : landlordError
+                            ? "Contact details unavailable"
+                            : landlord?.email
+                              ? "Messages you send here go directly to this landlord."
+                              : "Contact details will be shared after you send a message."}
                       </p>
                     </div>
                   </div>

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import AuthNav from "./AuthNav";
 import { useAuth } from "@/contexts/AuthContext";
+import { useConversations } from "@/hooks/useConversations";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -44,6 +45,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 export default function Navbar() {
   const { isLandlord, loading } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { totalUnread } = useConversations();
 
   return (
     <nav className="relative h-[var(--nav-height)] max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -111,6 +113,17 @@ export default function Navbar() {
 
         {/* Auth + mobile menu */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <Link
+            href="/messages"
+            className="hidden sm:inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors mr-1"
+          >
+            <span>Messages</span>
+            {totalUnread > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-semibold min-w-[1.1rem] h-4 px-1">
+                {totalUnread > 9 ? "9+" : totalUnread}
+              </span>
+            )}
+          </Link>
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}

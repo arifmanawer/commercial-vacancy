@@ -157,9 +157,7 @@ export default function LandlordContractorsPage() {
   };
 
   const handleMessageClick = (contractor: Contractor) => {
-    // Placeholder: integrate with messaging system when available
-    // For now, navigate to a generic messages route with contractor id
-    router.push(`/dashboard/renter?messageTo=${contractor.id}`);
+    router.push(`/contractors/${contractor.id}?message=true`);
   };
 
   const availabilityDotColor = (status: ContractorAvailabilityStatus) => {

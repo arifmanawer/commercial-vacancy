@@ -98,6 +98,10 @@ router.post<
       res.status(400).json({ success: false, error: 'contractor_id is required' });
       return;
     }
+    if (!listing_id) {
+      res.status(400).json({ success: false, error: 'listing_id is required' });
+      return;
+    }
     if (!title || !title.trim()) {
       res.status(400).json({ success: false, error: 'title is required' });
       return;
@@ -107,16 +111,16 @@ router.post<
       landlord_id: string;
       contractor_id: string;
       title: string;
+      listing_id: string;
     } = {
       landlord_id: userId,
       contractor_id,
+      listing_id,
       title: title.trim(),
       description: description?.trim() || null,
       status: 'requested',
       landlord_note: landlord_note?.trim() || null,
     };
-
-    if (listing_id) insertPayload.listing_id = listing_id;
     if (typeof budget === 'number' && !Number.isNaN(budget)) {
       insertPayload.budget = budget;
     }
@@ -148,6 +152,7 @@ router.post<
  * Query params:
  * - role: 'landlord' | 'contractor' (defaults to 'landlord')
  * - page, limit
+ * - listing_id: filter landlord view to a specific listing
  */
 router.get<
   unknown,
@@ -163,7 +168,7 @@ router.get<
       return;
     }
 
-    const { role = 'landlord', page = '1', limit = '20' } = req.query;
+    const { role = 'landlord', page = '1', limit = '20', listing_id } = req.query;
     const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
     const pageSizeRaw = parseInt(limit as string, 10) || 20;
     const pageSize = Math.min(Math.max(pageSizeRaw, 1), 50);
@@ -180,6 +185,9 @@ router.get<
       query = query.eq('contractor_id', userId);
     } else {
       query = query.eq('landlord_id', userId);
+      if (listing_id) {
+        query = query.eq('listing_id', listing_id as string);
+      }
     }
 
     const { data, error, count } = await query;

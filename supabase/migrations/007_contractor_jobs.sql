@@ -7,7 +7,7 @@ create table if not exists public.contractor_jobs (
   id uuid primary key default gen_random_uuid(),
   landlord_id uuid not null references auth.users(id) on delete cascade,
   contractor_id uuid not null references auth.users(id) on delete cascade,
-  listing_id uuid references public.listings(id) on delete set null,
+  listing_id uuid not null references public.listings(id) on delete cascade,
   title text not null,
   description text,
   budget numeric(12, 2),

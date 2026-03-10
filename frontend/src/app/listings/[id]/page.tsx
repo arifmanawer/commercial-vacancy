@@ -9,6 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
 import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
+import { SaveListingButton } from "@/components/SaveListingButton";
 
 type LandlordPublicInfo = {
   id: string;
@@ -124,10 +125,12 @@ export default function ListingPage() {
           console.warn("images fetch error", imgError.message);
         }
 
-        const images = (imgRows ?? [])
-          .flatMap((r: any) => (Array.isArray(r.image_url) ? r.image_url : []))
+        type ImageRow = { image_url: string[] | null };
+
+        const images = ((imgRows ?? []) as ImageRow[])
+          .flatMap((r) => (Array.isArray(r.image_url) ? r.image_url : []))
           .filter(
-            (u: any): u is string => typeof u === "string" && u.length > 0,
+            (u): u is string => typeof u === "string" && u.length > 0,
           );
 
         if (!cancelled) {
@@ -152,7 +155,7 @@ export default function ListingPage() {
           setLandlord(null);
           setLandlordError(null);
         }
-      } catch (_err) {
+      } catch {
         if (!cancelled) setNotFound(true);
       } finally {
         if (!cancelled) setLoading(false);
@@ -449,8 +452,8 @@ export default function ListingPage() {
 
             {/* Title & Key Info */}
             <div>
-              <div className="flex justify-between items-start">
-                <div>
+              <div className="flex justify-between items-start gap-4">
+                <div className="min-w-0">
                   <h1 className="text-3xl font-bold text-slate-900">
                     {listing.title}
                   </h1>
@@ -535,6 +538,14 @@ export default function ListingPage() {
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">
                   Interested in this space?
                 </h3>
+
+                <div className="mb-4">
+                  <SaveListingButton
+                    propertyId={listing.id}
+                    onError={setError}
+                    className="w-full py-2.5 text-sm"
+                  />
+                </div>
 
                 <div className="space-y-4">
                   <button

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import userRoutes from './users';
 import authEventsRoutes from './authEvents';
 import contractorRoutes from './contractors';
+import contractorJobsRoutes from './contractorJobs';
 import profileRoutes from './profiles';
 import listingRoutes from './listings';
 
@@ -12,6 +13,7 @@ router.use('/auth-events', authEventsRoutes);
 router.use('/contractors', contractorRoutes);
 router.use('/profiles', profileRoutes);
 router.use('/listings', listingRoutes);
+router.use('/contractor-jobs', contractorJobsRoutes);
 
 // Default API info route
 router.get('/', (_req, res) => {

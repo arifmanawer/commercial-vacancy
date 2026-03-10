@@ -24,6 +24,11 @@ export default function RenterDashboardPage() {
   const [savedListings, setSavedListings] = useState<SavedListing[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [loadingInquiries, setLoadingInquiries] = useState(false);
+  const [inquiriesError, setInquiriesError] = useState<string | null>(null);
+  const [listings, setListings] = useState<any[]>([]);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +118,105 @@ export default function RenterDashboardPage() {
       cancelled = true;
     };
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      setInquiries([]);
+      setListings([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadInquiries() {
+      setInquiriesError(null);
+      setLoadingInquiries(true);
+
+      const { data: inquiryRows, error: inquiryError } = await supabase
+        .from("listing_inquiries")
+        .select(
+          "id, listing_id, type, message, preferred_time, status, landlord_message, landlord_suggested_time, created_at, resolved_at",
+        )
+        .eq("renter_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (cancelled) return;
+
+      if (inquiryError) {
+        setInquiriesError(
+          inquiryError.message ||
+            "Could not load your interest or tour requests.",
+        );
+        setInquiries([]);
+        setListings([]);
+        setLoadingInquiries(false);
+        return;
+      }
+
+      const safeInquiries = inquiryRows || [];
+      setInquiries(safeInquiries);
+
+      const listingIds = Array.from(
+        new Set(safeInquiries.map((inq: any) => inq.listing_id).filter(Boolean)),
+      );
+
+      if (!listingIds.length) {
+        setListings([]);
+        setLoadingInquiries(false);
+        return;
+      }
+
+      const { data: listingRows, error: listingError } = await supabase
+        .from("listings")
+        .select("id, title, city, state, property_type")
+        .in("id", listingIds);
+
+      if (cancelled) return;
+
+      if (listingError) {
+        setInquiriesError(
+          listingError.message ||
+            "Could not load listings for your requests.",
+        );
+        setListings([]);
+      } else {
+        setListings(listingRows || []);
+      }
+
+      setLoadingInquiries(false);
+    }
+
+    loadInquiries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const updateInquiry = async (
+    id: string,
+    updates: Record<string, unknown>,
+  ) => {
+    setUpdatingId(id);
+    const { error: updateError } = await supabase
+      .from("listing_inquiries")
+      .update(updates)
+      .eq("id", id);
+
+    if (updateError) {
+      setInquiriesError(
+        updateError.message ||
+          "Could not update this request. Please try again.",
+      );
+    } else {
+      setInquiriesError(null);
+      setInquiries((prev) =>
+        prev.map((inq) => (inq.id === id ? { ...inq, ...updates } : inq)),
+      );
+    }
+
+    setUpdatingId(null);
+  };
 
   const savedCount = useMemo(() => savedListings.length, [savedListings]);
 

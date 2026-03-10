@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
+import { supabase } from "@/lib/supabaseClient";
 import type {
   Contractor,
   ContractorAvailabilityStatus,
@@ -77,6 +78,9 @@ export default function LandlordContractorsPage() {
   const [jobSubmitting, setJobSubmitting] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobSuccess, setJobSuccess] = useState<string | null>(null);
+  const [landlordListings, setLandlordListings] = useState<any[]>([]);
+  const [loadingListings, setLoadingListings] = useState(false);
+  const [listingsError, setListingsError] = useState<string | null>(null);
 
   // Redirect non-landlords as a safety net (RLS + middleware already protect)
   useEffect(() => {
@@ -141,6 +145,35 @@ export default function LandlordContractorsPage() {
     fetchData();
   }, [user, isLandlord, page, search, serviceQuery, availabilityFilter, radius, zip]);
 
+  useEffect(() => {
+    if (!user || !isLandlord) return;
+    let cancelled = false;
+    const loadListings = async () => {
+      setLoadingListings(true);
+      setListingsError(null);
+      try {
+        const { data, error } = await supabase
+          .from("listings")
+          .select("id, title, city, state")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (cancelled) return;
+        if (error) {
+          setListingsError(error.message);
+          setLandlordListings([]);
+        } else {
+          setLandlordListings(data || []);
+        }
+      } finally {
+        if (!cancelled) setLoadingListings(false);
+      }
+    };
+    loadListings();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isLandlord]);
+
   const toggleService = (service: ServiceFilter) => {
     setPage(1);
     setSelectedServices((prev) =>
@@ -204,6 +237,7 @@ export default function LandlordContractorsPage() {
     try {
       const payload = {
         contractor_id: creatingJobFor.user_id,
+        listing_id: landlordListings[0]?.id,
         title: jobTitle.trim(),
         description: jobDescription.trim() || undefined,
         budget: jobBudget ? Number(jobBudget) : undefined,
@@ -660,6 +694,33 @@ export default function LandlordContractorsPage() {
                     {jobSuccess}
                   </div>
                 )}
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Listing
+                  </label>
+                  {loadingListings ? (
+                    <p className="text-xs text-slate-500">
+                      Loading your listings…
+                    </p>
+                  ) : landlordListings.length === 0 ? (
+                    <p className="text-xs text-red-600">
+                      You need at least one listing to request a job. Create a
+                      listing from your Landlord dashboard first.
+                    </p>
+                  ) : (
+                    <select
+                      value={landlordListings[0]?.id}
+                      onChange={() => {}}
+                      className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-slate-50 text-slate-700"
+                    >
+                      {landlordListings.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.title || "Untitled"} – {l.city}, {l.state}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <label className="block text-xs font-medium text-slate-700">
                     Job title

@@ -8,8 +8,9 @@ import { supabase } from "@/lib/supabaseClient";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
-import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
+import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
+import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 
 type LandlordPublicInfo = {
   id: string;
@@ -53,26 +54,20 @@ export default function ListingPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [contactOpen, setContactOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
-  const [contactMessage, setContactMessage] = useState("");
   const [tourMessage, setTourMessage] = useState("");
   const [tourTime, setTourTime] = useState("");
-  const [submitting, setSubmitting] = useState<"contact" | "tour" | null>(
-    null,
-  );
+  const [submitting, setSubmitting] = useState<"tour" | null>(null);
+  const [startingConversation, setStartingConversation] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [landlord, setLandlord] = useState<LandlordPublicInfo | null>(null);
   const [landlordLoading, setLandlordLoading] = useState(false);
   const [landlordError, setLandlordError] = useState<string | null>(null);
   const [mapCenter, setMapCenter] =
     useState<google.maps.LatLngLiteral | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  const { isLoaded: mapsLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-  });
+  const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
   useEffect(() => {
     if (!id) {
@@ -152,7 +147,6 @@ export default function ListingPage() {
                 : null,
           });
           setActiveImage(0);
-          setLandlord(null);
           setLandlordError(null);
         }
       } catch {
@@ -170,7 +164,6 @@ export default function ListingPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLandlord(null);
     setLandlordError(null);
   }, [id]);
 
@@ -198,10 +191,7 @@ export default function ListingPage() {
           return;
         }
 
-        if (!cancelled) {
-          setLandlord(body.data);
-        }
-      } catch (_err) {
+      } catch {
         if (!cancelled) {
           setLandlordError("Unable to load landlord details.");
         }
@@ -246,7 +236,7 @@ export default function ListingPage() {
     });
   }, [mapsLoaded, listing]);
 
-  function ensureAuthenticated(action: "contact" | "tour" | "message") {
+  function ensureAuthenticated(action: "tour" | "message") {
     if (!user) {
       const target = `/signin?redirect=/listings/${id}&action=${action}`;
       router.push(target);
@@ -255,29 +245,30 @@ export default function ListingPage() {
     return true;
   }
 
-  async function submitInquiry(type: "contact" | "tour") {
+  async function submitInquiry() {
     if (!listing || !id) return;
-    if (!ensureAuthenticated(type) || !user) return;
+    if (!ensureAuthenticated("tour") || !user) return;
 
-    setSubmitting(type);
+    setSubmitting("tour");
     setFeedback(null);
     setError(null);
 
     try {
-      const message =
-        type === "contact"
-          ? contactMessage.trim()
-          : tourMessage.trim();
-      const preferred_time = type === "tour" ? tourTime.trim() : null;
+      const message = tourMessage.trim();
+      const preferred_time = tourTime.trim();
+      if (!preferred_time) {
+        setError("Please choose a preferred date and time for the tour.");
+        return;
+      }
 
       const { error: insertError } = await supabase
         .from("listing_inquiries")
         .insert({
           listing_id: listing.id,
           renter_id: user.id,
-          type,
+          type: "tour",
           message: message || null,
-          preferred_time,
+          preferred_time: preferred_time || null,
         });
 
       if (insertError) {
@@ -289,22 +280,15 @@ export default function ListingPage() {
       }
 
       setFeedback(
-        type === "contact"
-          ? "Your interest has been recorded. The landlord will be able to review it."
-          : "Your tour request has been recorded. The landlord will be able to review it.",
+        "Your tour request has been recorded. The landlord will be able to review it.",
       );
-      if (type === "contact") {
-        setContactOpen(false);
-        setContactMessage("");
-      } else {
-        setTourOpen(false);
-        setTourMessage("");
-        setTourTime("");
-      }
-    } catch (_err) {
+      setTourOpen(false);
+      setTourMessage("");
+      setTourTime("");
+    } catch {
       setError("Something went wrong. Please try again.");
     } finally {
-      setSubmitting((current) => (current === type ? null : current));
+      setSubmitting(null);
     }
   }
 
@@ -313,6 +297,9 @@ export default function ListingPage() {
     if (!ensureAuthenticated("message") || !user) return;
 
     try {
+      setFeedback(null);
+      setError(null);
+      setStartingConversation(true);
       const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
         method: "POST",
         headers: {
@@ -332,14 +319,16 @@ export default function ListingPage() {
 
       if (!res.ok || !json?.success || !json.data) {
         console.error("Failed to start conversation", json?.error);
-        alert("Unable to start message. Please try again.");
+        setError("Unable to start message. Please try again.");
         return;
       }
 
       router.push(`/messages/${json.data.id}`);
     } catch (err) {
       console.error(err);
-      alert("Unable to start message. Please try again.");
+      setError("Unable to start message. Please try again.");
+    } finally {
+      setStartingConversation(false);
     }
   }
 
@@ -586,28 +575,15 @@ export default function ListingPage() {
                   <button
                     className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
                     onClick={() => {
-                      setFeedback(null);
-                      setError(null);
-                      if (!ensureAuthenticated("contact")) return;
-                      setContactOpen((open) => !open);
-                      setTourOpen(false);
-                    }}
-                    disabled={submitting === "contact" || submitting === "tour"}
-                  >
-                    Contact Landlord
-                  </button>
-                  <button
-                    className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
-                    onClick={() => {
-                      if (!listing.landlord_user_id) {
-                        alert("Unable to message landlord for this listing.");
-                        return;
-                      }
                       startMessageThread();
                     }}
-                    disabled={submitting === "contact" || submitting === "tour"}
+                    disabled={
+                      submitting === "tour" ||
+                      startingConversation ||
+                      !listing.landlord_user_id
+                    }
                   >
-                    Message Landlord
+                    {startingConversation ? "Opening chat..." : "Contact Landlord"}
                   </button>
                   <button
                     className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
@@ -616,66 +592,49 @@ export default function ListingPage() {
                       setError(null);
                       if (!ensureAuthenticated("tour")) return;
                       setTourOpen((open) => !open);
-                      setContactOpen(false);
                     }}
-                    disabled={submitting === "contact" || submitting === "tour"}
+                    disabled={submitting === "tour"}
                   >
                     Schedule a Tour
                   </button>
                 </div>
 
-                {(contactOpen || tourOpen) && (
+                {tourOpen && (
                   <div className="mt-5 space-y-4 border-t border-slate-100 pt-4">
-                    {contactOpen && (
-                      <div className="space-y-3">
-                        <p className="text-sm text-slate-600">
-                          Send a short note about your interest in this space.
-                        </p>
-                        <textarea
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          rows={3}
-                          placeholder="Tell the landlord what you're looking for..."
-                          value={contactMessage}
-                          onChange={(e) => setContactMessage(e.target.value)}
+                    <div className="space-y-3">
+                      <p className="text-sm text-slate-600">
+                        Request a tour and suggest times that work for you.
+                      </p>
+                      <label className="block text-xs font-medium text-slate-600">
+                        Preferred date &amp; time
+                        <input
+                          type="datetime-local"
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                          value={tourTime}
+                          onChange={(e) => setTourTime(e.target.value)}
+                          required
                         />
+                      </label>
+                      <textarea
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                        rows={3}
+                        placeholder="Add any details about your availability or questions..."
+                        value={tourMessage}
+                        onChange={(e) => setTourMessage(e.target.value)}
+                      />
+                      <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => submitInquiry("contact")}
-                          className="w-full inline-flex justify-center items-center rounded-lg bg-slate-900 text-white py-2.5 px-4 text-sm font-medium hover:bg-slate-800 transition-colors disabled:opacity-60"
-                          disabled={submitting === "contact"}
+                          onClick={() => setTourOpen(false)}
+                          className="flex-1 inline-flex justify-center items-center rounded-lg bg-slate-100 text-slate-700 py-2.5 px-4 text-sm font-medium hover:bg-slate-200 transition-colors"
+                          disabled={submitting === "tour"}
                         >
-                          {submitting === "contact"
-                            ? "Sending..."
-                            : "Send to Landlord"}
+                          Close
                         </button>
-                      </div>
-                    )}
-
-                    {tourOpen && (
-                      <div className="space-y-3">
-                        <p className="text-sm text-slate-600">
-                          Request a tour and suggest times that work for you.
-                        </p>
-                        <label className="block text-xs font-medium text-slate-600">
-                          Preferred date &amp; time
-                          <input
-                            type="datetime-local"
-                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                            value={tourTime}
-                            onChange={(e) => setTourTime(e.target.value)}
-                          />
-                        </label>
-                        <textarea
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          rows={3}
-                          placeholder="Add any details about your availability or questions..."
-                          value={tourMessage}
-                          onChange={(e) => setTourMessage(e.target.value)}
-                        />
                         <button
                           type="button"
-                          onClick={() => submitInquiry("tour")}
-                          className="w-full inline-flex justify-center items-center rounded-lg bg-white text-slate-900 border border-slate-300 py-2.5 px-4 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
+                          onClick={submitInquiry}
+                          className="flex-1 inline-flex justify-center items-center rounded-lg bg-white text-slate-900 border border-slate-300 py-2.5 px-4 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
                           disabled={submitting === "tour"}
                         >
                           {submitting === "tour"
@@ -683,7 +642,7 @@ export default function ListingPage() {
                             : "Send Tour Request"}
                         </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -702,16 +661,6 @@ export default function ListingPage() {
                   </div>
                 )}
 
-                {landlord && (
-                  <p className="mt-3 text-xs text-slate-500">
-                    Your messages are delivered to{" "}
-                    <span className="font-medium text-slate-700">
-                      {landlord.email ?? "this listing’s landlord"}
-                    </span>
-                    .
-                  </p>
-                )}
-
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-3">
                     Listed by
@@ -720,16 +669,14 @@ export default function ListingPage() {
                     <div className="w-10 h-10 rounded-full bg-slate-200" />
                     <div>
                       <p className="text-sm font-medium text-slate-900">
-                        {landlord?.email || "Landlord"}
+                        Landlord
                       </p>
                       <p className="text-xs text-slate-500">
                         {landlordLoading
                           ? "Loading contact details…"
                           : landlordError
                             ? "Contact details unavailable"
-                            : landlord?.email
-                              ? "Messages you send here go directly to this landlord."
-                              : "Contact details will be shared after you send a message."}
+                            : "Messages you send here go directly to this landlord."}
                       </p>
                     </div>
                   </div>

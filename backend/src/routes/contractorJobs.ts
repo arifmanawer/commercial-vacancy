@@ -267,6 +267,24 @@ router.patch<
       return;
     }
 
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from<ContractorJobRow>('contractor_jobs')
+      .select('landlord_id, contractor_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      logContractorJobs('PATCH', `/api/contractor-jobs/${id}`, userId, false, fetchError?.message || 'Not found');
+      res.status(404).json({ success: false, error: 'Contractor job not found' });
+      return;
+    }
+
+    if (existing.landlord_id !== userId && existing.contractor_id !== userId) {
+      logContractorJobs('PATCH', `/api/contractor-jobs/${id}`, userId, false, 'Forbidden');
+      res.status(403).json({ success: false, error: 'You do not have permission to update this job' });
+      return;
+    }
+
     updates.updated_at = new Date().toISOString() as any;
 
     const { data, error } = await supabaseAdmin

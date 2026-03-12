@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   GoogleMap,
   Marker,
@@ -8,6 +8,7 @@ import {
   useLoadScript,
   Autocomplete,
 } from "@react-google-maps/api";
+import { supabase } from "@/lib/supabaseClient";
 
 const DEFAULT_CENTER: google.maps.LatLngLiteral = {
   lat: 40.7128,
@@ -15,62 +16,42 @@ const DEFAULT_CENTER: google.maps.LatLngLiteral = {
 };
 
 const MAP_STYLES: google.maps.MapOptions["styles"] = [
-   {
-     featureType: "poi",
-     elementType: "labels.icon",
-     stylers: [{ visibility: "off" }],
-   },
-   {
-     featureType: "transit",
-     elementType: "labels.icon",
-     stylers: [{ visibility: "off" }],
-   },
-   {
-     featureType: "road",
-     elementType: "geometry",
-     stylers: [{ lightness: 20 }],
-   },
-   {
-     featureType: "administrative",
-     elementType: "labels.text.fill",
-     stylers: [{ color: "#334155" }],
-   },
- ];
+  {
+    featureType: "poi",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ lightness: 20 }],
+  },
+  {
+    featureType: "administrative",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#334155" }],
+  },
+];
 
 const containerStyle = {
   width: "100%",
   height: "100%",
 };
 
-const sampleSpaces: {
-   id: string;
-   position: google.maps.LatLngLiteral;
-   title: string;
-   type: "retail" | "office" | "event";
-   address: string;
- }[] = [
-   {
-     id: "1",
-     position: { lat: 40.719, lng: -74.002 },
-     title: "SoHo Pop-Up Retail Space",
-     type: "retail",
-     address: "SoHo, Manhattan",
-   },
-   {
-     id: "2",
-     position: { lat: 40.7306, lng: -73.9866 },
-     title: "Creative Studio Loft",
-     type: "event",
-     address: "East Village, Manhattan",
-   },
-   {
-     id: "3",
-     position: { lat: 40.7527, lng: -73.9772 },
-     title: "Flexible Office Suite",
-     type: "office",
-     address: "Midtown, Manhattan",
-   },
- ];
+type GeocodedListing = {
+  id: string;
+  title: string;
+  address: string;
+  city: string;
+  state: string;
+  property_type: string;
+  position: google.maps.LatLngLiteral;
+};
 
 export default function MapView() {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -79,11 +60,79 @@ export default function MapView() {
     useState<google.maps.LatLngLiteral | null>(null);
   const [autocomplete, setAutocomplete] =
     useState<google.maps.places.Autocomplete | null>(null);
+  const [listings, setListings] = useState<GeocodedListing[]>([]);
+  const [loadingListings, setLoadingListings] = useState(true);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
     libraries: ["places"],
   });
+
+  useEffect(() => {
+    async function fetchAndGeocode() {
+      if (!isLoaded) return;
+
+      setLoadingListings(true);
+      try {
+        const { data, error } = await supabase
+          .from("listings")
+          .select("id, title, address, city, state, property_type");
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          setListings([]);
+          return;
+        }
+
+        const geocoder = new google.maps.Geocoder();
+        const results: GeocodedListing[] = [];
+
+        // Geocode addresses sequentially to respect rate limits
+        for (const item of data) {
+          const parts = [item.address, item.city, item.state]
+            .map((p) => p?.trim())
+            .filter((p) => p && p.length > 0);
+
+          const addressStr = parts.join(", ");
+          if (!addressStr) continue;
+
+          try {
+            const geocodeResult = await new Promise<google.maps.GeocoderResult[] | null>((resolve) => {
+              geocoder.geocode({ address: addressStr }, (res, status) => {
+                if (status === "OK") resolve(res);
+                else resolve(null);
+              });
+            });
+
+            if (geocodeResult && geocodeResult[0]?.geometry?.location) {
+              results.push({
+                id: item.id,
+                title: item.title,
+                address: item.address || "",
+                city: item.city || "",
+                state: item.state || "",
+                property_type: item.property_type || "Space",
+                position: {
+                  lat: geocodeResult[0].geometry.location.lat(),
+                  lng: geocodeResult[0].geometry.location.lng(),
+                },
+              });
+            }
+          } catch (e) {
+            console.warn("Geocoding failed for", addressStr, e);
+          }
+        }
+        setListings(results);
+      } catch (err) {
+        console.error("Error loading listings for map:", err);
+      } finally {
+        setLoadingListings(false);
+      }
+    }
+
+    fetchAndGeocode();
+  }, [isLoaded]);
 
   const handlePlaceChanged = () => {
     if (!autocomplete) return;
@@ -116,7 +165,12 @@ export default function MapView() {
   }
 
   return (
-    <div className="h-[480px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+    <div className="h-[480px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative">
+      {loadingListings && (
+        <div className="absolute inset-0 z-20 bg-white/50 backdrop-blur-[1px] flex items-center justify-center text-xs font-medium text-slate-600">
+          Syncing listings...
+        </div>
+      )}
       <GoogleMap
         center={center}
         zoom={12}
@@ -140,7 +194,7 @@ export default function MapView() {
           />
         </Autocomplete>
 
-        {sampleSpaces.map((space) => (
+        {listings.map((space) => (
           <Marker
             key={space.id}
             position={space.position}
@@ -148,11 +202,14 @@ export default function MapView() {
           >
             {activeId === space.id && (
               <InfoWindow onCloseClick={() => setActiveId(null)}>
-                <div className="text-xs">
+                <div className="text-xs p-1">
                   <p className="font-semibold text-slate-900">{space.title}</p>
-                  <p className="text-slate-600">{space.address}</p>
-                  <p className="mt-1 uppercase tracking-wide text-[10px] text-slate-500">
-                    {space.type} space
+                  <p className="text-slate-600">
+                    {space.address}
+                    {space.city ? `, ${space.city}` : ""}
+                  </p>
+                  <p className="mt-1 uppercase tracking-wide text-[10px] font-bold text-slate-500">
+                    {space.property_type}
                   </p>
                 </div>
               </InfoWindow>

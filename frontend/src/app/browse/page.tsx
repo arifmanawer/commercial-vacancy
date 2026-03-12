@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { SaveListingButton } from "@/components/SaveListingButton";
 
 type ListingView = {
   id: string;
@@ -17,6 +18,30 @@ type ListingView = {
   security_deposit?: number | null;
   rental_type?: string | null;
   image?: string | null;
+};
+
+type SavedListingRow = {
+  property_id: string | null;
+};
+
+type ListingRow = {
+  id: string;
+  title: string;
+  city: string | null;
+  state: string | null;
+  property_type: string | null;
+};
+
+type PricingRow = {
+  property_id: string;
+  price: number | null;
+  rental_type: string | null;
+  security_deposit: number | null;
+};
+
+type ImageRow = {
+  property_id: string;
+  image_url: string[] | null;
 };
 
 type FilterState = {
@@ -32,7 +57,6 @@ type FilterState = {
 export default function BrowsePage() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const [savingId, setSavingId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,14 +98,15 @@ export default function BrowsePage() {
         }
 
         const next = new Set<string>();
-        (data ?? []).forEach((r: any) => {
-          if (typeof r?.property_id === "string" && r.property_id.length > 0) {
+        const rows = (data ?? []) as SavedListingRow[];
+        rows.forEach((r) => {
+          if (typeof r.property_id === "string" && r.property_id.length > 0) {
             next.add(r.property_id);
           }
         });
 
         if (!cancelled) setSavedIds(next);
-      } catch (_err) {
+      } catch {
         if (!cancelled) setError("Unable to load saved spaces.");
       } finally {
         if (!cancelled) setLoadingSaved(false);
@@ -93,67 +118,6 @@ export default function BrowsePage() {
       cancelled = true;
     };
   }, [userId]);
-
-  const handleToggleSave = async (property_id: string) => {
-    setError(null);
-
-    if (!user) {
-      setError("Please sign in to save spaces.");
-      return;
-    }
-
-    const currentlySaved = savedIds.has(property_id);
-
-    setSavingId(property_id);
-    try {
-      if (currentlySaved) {
-        const { error: deleteError } = await supabase
-          .from("saved_listings")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("property_id", property_id);
-
-        if (deleteError) {
-          setError(deleteError.message ?? "Unable to remove this saved space.");
-          return;
-        }
-
-        setSavedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(property_id);
-          return next;
-        });
-      } else {
-        const { error: insertError } = await supabase
-          .from("saved_listings")
-          .insert({
-            user_id: user.id,
-            property_id: property_id,
-          });
-
-        if (insertError) {
-          const msg = insertError.message ?? "";
-          const isDuplicate =
-            insertError.code === "23505" ||
-            msg.toLowerCase().includes("duplicate");
-          if (!isDuplicate) {
-            setError(insertError.message ?? "Unable to save this space.");
-            return;
-          }
-        }
-
-        setSavedIds((prev) => {
-          const next = new Set(prev);
-          next.add(property_id);
-          return next;
-        });
-      }
-    } catch (_err) {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setSavingId(null);
-    }
-  };
 
   useEffect(() => {
     let mounted = true;
@@ -170,7 +134,9 @@ export default function BrowsePage() {
           return;
         }
 
-        const ids = listingRows.map((r: any) => r.id);
+        const rows = listingRows as ListingRow[];
+
+        const ids = rows.map((r) => r.id);
         const { data: priceRows } = await supabase
           .from("property_pricing")
           .select("property_id, price, rental_type, security_deposit")
@@ -184,11 +150,13 @@ export default function BrowsePage() {
           .order("id", { ascending: true });
 
         const priceMap = new Map<string, any>();
-        (priceRows ?? []).forEach((p: any) => priceMap.set(p.property_id, p));
+        const priceRowsTyped = (priceRows ?? []) as PricingRow[];
+        priceRowsTyped.forEach((p) => priceMap.set(p.property_id, p));
         const imgMap = new Map<string, any>();
-        (imgRows ?? []).forEach((r: any) => imgMap.set(r.property_id, r));
+        const imgRowsTyped = (imgRows ?? []) as ImageRow[];
+        imgRowsTyped.forEach((r) => imgMap.set(r.property_id, r));
 
-        const view = listingRows.map((r: any) => {
+        const view = rows.map((r) => {
           const pricing = priceMap.get(r.id);
           return {
             id: r.id,
@@ -433,7 +401,6 @@ export default function BrowsePage() {
             ) : (
               filteredListings.map((listing) => {
                 const isSaved = savedIds.has(listing.id);
-                const isSaving = savingId === listing.id;
 
                 return (
                   <article
@@ -469,23 +436,23 @@ export default function BrowsePage() {
                     </p>
 
                     <div className="mt-4 flex justify-between items-center gap-3">
-                      <button
-                        type="button"
-                        aria-pressed={isSaved}
-                        onClick={() => handleToggleSave(listing.id)}
-                        disabled={isSaving || loadingSaved}
-                        className={`inline-flex items-center justify-center text-xs px-3 py-1.5 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20 disabled:opacity-60 disabled:cursor-default ${
-                          isSaved
-                            ? "border-[var(--brand)]/30 text-[var(--brand)] hover:border-[var(--brand)] hover:bg-[var(--brand)]/5"
-                            : "border-slate-200 text-slate-700 hover:border-[var(--brand)] hover:text-[var(--brand)]"
-                        }`}
-                      >
-                        {isSaving
-                          ? "Saving..."
-                          : isSaved
-                            ? "Unsave"
-                            : "Save space"}
-                      </button>
+                      <SaveListingButton
+                        propertyId={listing.id}
+                        isSaved={isSaved}
+                        disabled={loadingSaved}
+                        onChange={(nextSaved) => {
+                          setSavedIds((prev) => {
+                            const next = new Set(prev);
+                            if (nextSaved) {
+                              next.add(listing.id);
+                            } else {
+                              next.delete(listing.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        onError={setError}
+                      />
                       <Link
                         href={`/listings/${listing.id}`}
                         className="text-xs text-slate-600 hover:text-slate-900"

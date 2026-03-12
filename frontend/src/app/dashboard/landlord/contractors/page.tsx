@@ -7,7 +7,12 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
-import type { Contractor, ContractorAvailabilityStatus } from "@/types/database";
+import { supabase } from "@/lib/supabaseClient";
+import type {
+  Contractor,
+  ContractorAvailabilityStatus,
+  ContractorJob,
+} from "@/types/database";
 
 type ServiceFilter =
   | "Painting"
@@ -42,6 +47,12 @@ interface ApiContractorResponse {
   error?: string;
 }
 
+interface ApiContractorJobResponse {
+  success: boolean;
+  data?: ContractorJob;
+  error?: string;
+}
+
 export default function LandlordContractorsPage() {
   const router = useRouter();
   const { user, isLandlord, loading } = useAuth();
@@ -59,6 +70,17 @@ export default function LandlordContractorsPage() {
   const [total, setTotal] = useState(0);
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [creatingJobFor, setCreatingJobFor] = useState<Contractor | null>(null);
+  const [jobTitle, setJobTitle] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [jobBudget, setJobBudget] = useState("");
+  const [jobPreferredDate, setJobPreferredDate] = useState("");
+  const [jobSubmitting, setJobSubmitting] = useState(false);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [jobSuccess, setJobSuccess] = useState<string | null>(null);
+  const [landlordListings, setLandlordListings] = useState<any[]>([]);
+  const [loadingListings, setLoadingListings] = useState(false);
+  const [listingsError, setListingsError] = useState<string | null>(null);
 
   // Redirect non-landlords as a safety net (RLS + middleware already protect)
   useEffect(() => {
@@ -123,6 +145,35 @@ export default function LandlordContractorsPage() {
     fetchData();
   }, [user, isLandlord, page, search, serviceQuery, availabilityFilter, radius, zip]);
 
+  useEffect(() => {
+    if (!user || !isLandlord) return;
+    let cancelled = false;
+    const loadListings = async () => {
+      setLoadingListings(true);
+      setListingsError(null);
+      try {
+        const { data, error } = await supabase
+          .from("listings")
+          .select("id, title, city, state")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (cancelled) return;
+        if (error) {
+          setListingsError(error.message);
+          setLandlordListings([]);
+        } else {
+          setLandlordListings(data || []);
+        }
+      } finally {
+        if (!cancelled) setLoadingListings(false);
+      }
+    };
+    loadListings();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isLandlord]);
+
   const toggleService = (service: ServiceFilter) => {
     setPage(1);
     setSelectedServices((prev) =>
@@ -158,6 +209,72 @@ export default function LandlordContractorsPage() {
 
   const handleMessageClick = (contractor: Contractor) => {
     router.push(`/contractors/${contractor.id}?message=true`);
+    // Placeholder: integrate with messaging system when available
+    router.push(`/dashboard/renter?messageTo=${contractor.id}`);
+  };
+
+  const resetJobForm = () => {
+    setJobTitle("");
+    setJobDescription("");
+    setJobBudget("");
+    setJobPreferredDate("");
+    setJobError(null);
+  };
+
+  const handleCreateJobClick = (contractor: Contractor) => {
+    setJobSuccess(null);
+    setCreatingJobFor(contractor);
+    resetJobForm();
+  };
+
+  const handleSubmitJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !creatingJobFor) return;
+
+    setJobSubmitting(true);
+    setJobError(null);
+    setJobSuccess(null);
+
+    try {
+      const payload = {
+        contractor_id: creatingJobFor.user_id,
+        listing_id: landlordListings[0]?.id,
+        title: jobTitle.trim(),
+        description: jobDescription.trim() || undefined,
+        budget: jobBudget ? Number(jobBudget) : undefined,
+        preferred_date: jobPreferredDate || undefined,
+      };
+
+      const res = await fetch(`${getApiUrl()}/api/contractor-jobs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const body = (await res.json().catch(() => null)) as
+        | ApiContractorJobResponse
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !body || !("success" in body) || !body.success) {
+        throw new Error(
+          (body && "error" in body && body.error) ||
+            "Failed to create contractor job",
+        );
+      }
+
+      setJobSuccess("Job request sent to contractor.");
+      resetJobForm();
+    } catch (err) {
+      setJobError(
+        err instanceof Error ? err.message : "Failed to create contractor job",
+      );
+    } finally {
+      setJobSubmitting(false);
+    }
   };
 
   const availabilityDotColor = (status: ContractorAvailabilityStatus) => {
@@ -495,6 +612,13 @@ export default function LandlordContractorsPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleCreateJobClick(contractor)}
+                    className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  >
+                    Request job
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
                       router.push(`/contractors/${contractor.id}`)
                     }
@@ -534,6 +658,144 @@ export default function LandlordContractorsPage() {
             </div>
           )}
         </section>
+
+        {creatingJobFor && (
+          <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+            <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-slate-200">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Request job from {creatingJobFor.business_name}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Describe the work and when you’d like it done.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatingJobFor(null);
+                    resetJobForm();
+                  }}
+                  className="text-slate-400 hover:text-slate-700"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <form onSubmit={handleSubmitJob} className="px-5 py-4 space-y-3">
+                {jobError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {jobError}
+                  </div>
+                )}
+                {jobSuccess && (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                    {jobSuccess}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Listing
+                  </label>
+                  {loadingListings ? (
+                    <p className="text-xs text-slate-500">
+                      Loading your listings…
+                    </p>
+                  ) : landlordListings.length === 0 ? (
+                    <p className="text-xs text-red-600">
+                      You need at least one listing to request a job. Create a
+                      listing from your Landlord dashboard first.
+                    </p>
+                  ) : (
+                    <select
+                      value={landlordListings[0]?.id}
+                      onChange={() => {}}
+                      className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-slate-50 text-slate-700"
+                    >
+                      {landlordListings.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.title || "Untitled"} – {l.city}, {l.state}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Job title
+                  </label>
+                  <input
+                    type="text"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    required
+                    placeholder="e.g. Deep clean and repaint storefront"
+                    className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Job details
+                  </label>
+                  <textarea
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    rows={3}
+                    placeholder="Share any details about the space, scope of work, and timing."
+                    className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-slate-700">
+                      Budget (optional)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={jobBudget}
+                      onChange={(e) => setJobBudget(e.target.value)}
+                      placeholder="e.g. 500"
+                      className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-slate-700">
+                      Preferred date
+                    </label>
+                    <input
+                      type="date"
+                      value={jobPreferredDate}
+                      onChange={(e) => setJobPreferredDate(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatingJobFor(null);
+                      resetJobForm();
+                    }}
+                    className="inline-flex items-center rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={jobSubmitting}
+                    className="inline-flex items-center rounded-md bg-slate-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    {jobSubmitting ? "Sending…" : "Send request"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        )}
       </main>
 
       <Footer />

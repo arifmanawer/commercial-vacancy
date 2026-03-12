@@ -25,3 +25,25 @@ export type Contractor = {
   };
 };
 
+export type ContractorJobStatus =
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "completed";
+
+export type ContractorJob = {
+  id: string;
+  landlord_id: string;
+  contractor_id: string;
+  listing_id: string | null;
+  title: string;
+  description: string | null;
+  budget: number | null;
+  preferred_date: string | null;
+  status: ContractorJobStatus;
+  landlord_note: string | null;
+  contractor_note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+

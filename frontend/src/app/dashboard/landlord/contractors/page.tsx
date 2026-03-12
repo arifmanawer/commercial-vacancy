@@ -208,6 +208,7 @@ export default function LandlordContractorsPage() {
   };
 
   const handleMessageClick = (contractor: Contractor) => {
+    router.push(`/contractors/${contractor.id}?message=true`);
     // Placeholder: integrate with messaging system when available
     router.push(`/dashboard/renter?messageTo=${contractor.id}`);
   };

@@ -246,7 +246,7 @@ export default function ListingPage() {
     });
   }, [mapsLoaded, listing]);
 
-  function ensureAuthenticated(action: "contact" | "tour") {
+  function ensureAuthenticated(action: "contact" | "tour" | "message") {
     if (!user) {
       const target = `/signin?redirect=/listings/${id}&action=${action}`;
       router.push(target);
@@ -305,6 +305,41 @@ export default function ListingPage() {
       setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting((current) => (current === type ? null : current));
+    }
+  }
+
+  async function startMessageThread() {
+    if (!listing || !id) return;
+    if (!ensureAuthenticated("message") || !user) return;
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify({
+          contextType: "listing",
+          listingId: id,
+          participantIds: [user.id, listing.landlord_user_id],
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: { id: string }; error?: string }
+        | null;
+
+      if (!res.ok || !json?.success || !json.data) {
+        console.error("Failed to start conversation", json?.error);
+        alert("Unable to start message. Please try again.");
+        return;
+      }
+
+      router.push(`/messages/${json.data.id}`);
+    } catch (err) {
+      console.error(err);
+      alert("Unable to start message. Please try again.");
     }
   }
 
@@ -560,6 +595,19 @@ export default function ListingPage() {
                     disabled={submitting === "contact" || submitting === "tour"}
                   >
                     Contact Landlord
+                  </button>
+                  <button
+                    className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                    onClick={() => {
+                      if (!listing.landlord_user_id) {
+                        alert("Unable to message landlord for this listing.");
+                        return;
+                      }
+                      startMessageThread();
+                    }}
+                    disabled={submitting === "contact" || submitting === "tour"}
+                  >
+                    Message Landlord
                   </button>
                   <button
                     className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"

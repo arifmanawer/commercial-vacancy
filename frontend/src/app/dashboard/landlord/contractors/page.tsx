@@ -79,6 +79,7 @@ export default function LandlordContractorsPage() {
   const [jobError, setJobError] = useState<string | null>(null);
   const [jobSuccess, setJobSuccess] = useState<string | null>(null);
   const [landlordListings, setLandlordListings] = useState<any[]>([]);
+  const [selectedListingId, setSelectedListingId] = useState<string>("");
   const [loadingListings, setLoadingListings] = useState(false);
   const [listingsError, setListingsError] = useState<string | null>(null);
 
@@ -162,7 +163,11 @@ export default function LandlordContractorsPage() {
           setListingsError(error.message);
           setLandlordListings([]);
         } else {
-          setLandlordListings(data || []);
+          const listings = data || [];
+          setLandlordListings(listings);
+          if (listings.length > 0) {
+            setSelectedListingId((prev) => prev || listings[0].id);
+          }
         }
       } finally {
         if (!cancelled) setLoadingListings(false);
@@ -207,10 +212,35 @@ export default function LandlordContractorsPage() {
     setPage(1);
   };
 
-  const handleMessageClick = (contractor: Contractor) => {
-    router.push(`/contractors/${contractor.id}?message=true`);
-    // Placeholder: integrate with messaging system when available
-    router.push(`/dashboard/renter?messageTo=${contractor.id}`);
+  const handleMessageClick = async (contractor: Contractor) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify({
+          contextType: "contractor",
+          contractorId: contractor.id,
+          participantIds: [user.id, contractor.user_id],
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: { id: string }; error?: string }
+        | null;
+
+      if (!res.ok || !json?.success || !json.data) {
+        alert("Unable to start conversation. Please try again.");
+        return;
+      }
+
+      router.push(`/messages/${json.data.id}`);
+    } catch {
+      alert("Unable to start conversation. Please try again.");
+    }
   };
 
   const resetJobForm = () => {
@@ -238,7 +268,7 @@ export default function LandlordContractorsPage() {
     try {
       const payload = {
         contractor_id: creatingJobFor.user_id,
-        listing_id: landlordListings[0]?.id,
+        listing_id: selectedListingId || undefined,
         title: jobTitle.trim(),
         description: jobDescription.trim() || undefined,
         budget: jobBudget ? Number(jobBudget) : undefined,
@@ -619,10 +649,9 @@ export default function LandlordContractorsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      router.push(`/contractors/${contractor.id}`)
-                    }
-                    className="text-xs font-medium text-slate-600 hover:text-slate-900 underline"
+                    disabled
+                    title="Contractor profiles coming soon"
+                    className="text-xs font-medium text-slate-400 cursor-not-allowed"
                   >
                     View profile
                   </button>
@@ -709,8 +738,8 @@ export default function LandlordContractorsPage() {
                     </p>
                   ) : (
                     <select
-                      value={landlordListings[0]?.id}
-                      onChange={() => {}}
+                      value={selectedListingId}
+                      onChange={(e) => setSelectedListingId(e.target.value)}
                       className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 text-sm bg-slate-50 text-slate-700"
                     >
                       {landlordListings.map((l) => (
@@ -786,7 +815,7 @@ export default function LandlordContractorsPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={jobSubmitting}
+                    disabled={jobSubmitting || landlordListings.length === 0}
                     className="inline-flex items-center rounded-md bg-slate-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60"
                   >
                     {jobSubmitting ? "Sending…" : "Send request"}

@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+import { getApiUrl } from "./api";
 
 type AuthEvent = "signin" | "signup";
 
@@ -20,7 +20,7 @@ function logAuthEvent(
   console.log(`[Auth] ${event} attempt:`, payload);
 
   // Fire-and-forget: send to backend for server-side logging
-  fetch(`${API_URL}/api/auth-events`, {
+  fetch(`${getApiUrl()}/api/auth-events`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

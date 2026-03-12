@@ -5,10 +5,10 @@ import {
   GoogleMap,
   Marker,
   InfoWindow,
-  useLoadScript,
   Autocomplete,
 } from "@react-google-maps/api";
 import { supabase } from "@/lib/supabaseClient";
+import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 
 const DEFAULT_CENTER: google.maps.LatLngLiteral = {
   lat: 40.7128,
@@ -63,10 +63,7 @@ export default function MapView() {
   const [listings, setListings] = useState<GeocodedListing[]>([]);
   const [loadingListings, setLoadingListings] = useState(true);
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-    libraries: ["places"],
-  });
+  const { isLoaded } = useGoogleMapsLoader();
 
   useEffect(() => {
     async function fetchAndGeocode() {

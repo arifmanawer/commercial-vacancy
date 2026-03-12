@@ -8,8 +8,9 @@ import { supabase } from "@/lib/supabaseClient";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
-import { GoogleMap, Marker, useLoadScript } from "@react-google-maps/api";
+import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
+import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 
 type LandlordPublicInfo = {
   id: string;
@@ -70,9 +71,7 @@ export default function ListingPage() {
     useState<google.maps.LatLngLiteral | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  const { isLoaded: mapsLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-  });
+  const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
   useEffect(() => {
     if (!id) {

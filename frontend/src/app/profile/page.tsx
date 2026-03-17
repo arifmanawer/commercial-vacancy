@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import { getApiUrl } from "@/lib/api";
 
 const ROLES = [
@@ -31,17 +32,85 @@ const ROLES = [
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, isLandlord, isContractor, loading: authLoading } = useAuth();
+  const { user, profile, isLandlord, isContractor, loading: authLoading, refreshProfile } = useAuth();
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const { refreshProfile } = useAuth();
+  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [profilePictureUrl, setProfilePictureUrl] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (!success) return;
     const t = setTimeout(() => setSuccess(null), 4000);
     return () => clearTimeout(t);
   }, [success]);
+
+  useEffect(() => {
+    setUsername(profile?.username ?? "");
+    setFirstName(profile?.first_name ?? "");
+    setLastName(profile?.last_name ?? "");
+    setAddress(profile?.address ?? "");
+    setDescription(profile?.description ?? "");
+    setProfilePictureUrl(profile?.profile_picture_url ?? "");
+  }, [profile]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user?.id) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `avatars/${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from("profile_avatars")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError || !uploadData?.path) {
+        throw new Error(uploadError?.message || "Failed to upload profile picture");
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("profile_avatars")
+        .getPublicUrl(uploadData.path);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ profile_picture_url: publicUrl })
+        .eq("id", user.id);
+
+      if (profileError) {
+        throw new Error(profileError.message || "Failed to save profile picture URL");
+      }
+
+      setProfilePictureUrl(publicUrl);
+      await refreshProfile();
+      router.refresh();
+      setSuccess("Profile picture updated.");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message || "Failed to upload profile picture."
+          : "Failed to upload profile picture.";
+      setError(msg);
+    } finally {
+      setAvatarUploading(false);
+      // clear the file input value so the same file can be reselected if needed
+      e.target.value = "";
+    }
+  };
 
   const handleRoleChange = async (roleId: string, checked: boolean) => {
     if (!user?.id || roleId === "renter") return;
@@ -81,6 +150,45 @@ export default function ProfilePage() {
             ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
             : err.message
           : "Failed to update role.";
+      setError(msg);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+    setUpdating(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          username: username.trim() || null,
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          address: address.trim() || null,
+          description: description.trim() || null,
+          profile_picture_url: profilePictureUrl.trim() || null,
+        })
+        .eq("id", user.id);
+
+      if (updateError) {
+        throw new Error(updateError.message || "Failed to update profile. Try again.");
+      }
+
+      await refreshProfile();
+      router.refresh();
+      setSuccess("Profile updated.");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message === "Failed to fetch"
+            ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
+            : err.message
+          : "Failed to update profile.";
       setError(msg);
     } finally {
       setUpdating(false);
@@ -138,6 +246,117 @@ export default function ProfilePage() {
           Manage your account and roles.
         </p>
 
+        <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 space-y-5">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 rounded-full border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
+              {profilePictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profilePictureUrl} alt="Profile picture" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs text-slate-500">No photo</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {[firstName, lastName].filter(Boolean).join(" ") || username || user.email}
+              </p>
+              <p className="text-xs text-slate-500 truncate">Update your public profile info.</p>
+              <div className="mt-2">
+                <label className="inline-flex items-center text-xs font-medium text-slate-700 cursor-pointer">
+                  <span className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50">
+                    {avatarUploading ? "Uploading..." : "Change photo"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={avatarUploading}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-sm text-green-600" role="status">
+              {success}
+            </p>
+          )}
+
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <label className="block">
+              <span className="text-sm text-slate-700">Username</span>
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-sm text-slate-700">First name</span>
+                <input
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-slate-700">Last name</span>
+                <input
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-sm text-slate-700">Address (optional)</span>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm text-slate-700">Description</span>
+              <textarea
+                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <div className="pt-2 flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={updating}
+                className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-60"
+              >
+                {updating ? "Saving..." : "Save profile"}
+              </button>
+            </div>
+          </form>
+        </section>
+
         <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 space-y-6">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
@@ -181,41 +400,51 @@ export default function ProfilePage() {
               </div>
 
               {/* Landlord & Contractor: selectable */}
-              {ROLES.slice(1).map((role) => {
-                const isChecked =
-                  (role.profileKey === "is_landlord" && isLandlord) ||
-                  (role.profileKey === "is_contractor" && isContractor);
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  isLandlord
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
+                    : "border-slate-200 hover:border-slate-300"
+                } ${updating ? "opacity-70 pointer-events-none" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isLandlord}
+                  disabled={updating}
+                  onChange={(e) => handleRoleChange("landlord", e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-slate-900">Landlord</span>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {isLandlord ? "Active" : "Inactive"}
+                  </span>
+                  <p className="mt-0.5 text-sm text-slate-600">{ROLES[1].description}</p>
+                </div>
+              </label>
 
-                return (
-                  <label
-                    key={role.id}
-                    className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                      isChecked
-                        ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
-                        : "border-slate-200 hover:border-slate-300"
-                    } ${updating ? "opacity-70 pointer-events-none" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={updating}
-                      onChange={(e) =>
-                        role.profileKey
-                          ? handleRoleChange(role.id, e.target.checked)
-                          : undefined
-                      }
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-slate-900">{role.label}</span>
-                      <span className="ml-2 text-xs text-slate-500">
-                        {isChecked ? "Active" : "Inactive"}
-                      </span>
-                      <p className="mt-0.5 text-sm text-slate-600">{role.description}</p>
-                    </div>
-                  </label>
-                );
-              })}
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  isContractor
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
+                    : "border-slate-200 hover:border-slate-300"
+                } ${updating ? "opacity-70 pointer-events-none" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isContractor}
+                  disabled={updating}
+                  onChange={(e) => handleRoleChange("contractor", e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-slate-900">Contractor</span>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {isContractor ? "Active" : "Inactive"}
+                  </span>
+                  <p className="mt-0.5 text-sm text-slate-600">{ROLES[2].description}</p>
+                </div>
+              </label>
             </div>
           </div>
 

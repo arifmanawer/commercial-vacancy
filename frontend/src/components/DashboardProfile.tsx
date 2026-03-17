@@ -16,7 +16,12 @@ export default function DashboardProfile() {
     );
   }
 
-  const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
+  const name =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    profile?.username ||
+    user.user_metadata?.full_name ||
+    user.email?.split("@")[0] ||
+    "User";
   const memberSince = profile?.created_at || user.created_at
     ? new Date(profile?.created_at || user.created_at!).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : "—";
@@ -30,13 +35,24 @@ export default function DashboardProfile() {
         Profile
       </h2>
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-500 text-lg font-semibold">
-          {name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase()}
+        <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {profile?.profile_picture_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.profile_picture_url}
+              alt={name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-slate-500 text-lg font-semibold">
+              {name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()}
+            </span>
+          )}
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <p className="text-lg font-semibold text-slate-900 truncate">{name}</p>

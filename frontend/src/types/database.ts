@@ -4,6 +4,12 @@ export type Profile = {
   is_landlord: boolean;
   is_contractor: boolean;
   created_at: string;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  address?: string | null;
+  description?: string | null;
+  profile_picture_url?: string | null;
 };
 
 export type ContractorAvailabilityStatus = "available" | "soon" | "busy";

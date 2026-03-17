@@ -15,6 +15,11 @@ interface LandlordPublicInfo {
   email: string | null;
   is_landlord: boolean;
   created_at: string | null;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  description: string | null;
+  profile_picture_url: string | null;
 }
 
 function logListingApi(
@@ -78,7 +83,7 @@ router.get<
       error: profileError,
     } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, is_landlord, created_at')
+      .select('id, email, is_landlord, created_at, username, first_name, last_name, description, profile_picture_url')
       .eq('id', listing.user_id)
       .maybeSingle();
 
@@ -99,6 +104,11 @@ router.get<
       email: (profile as any).email ?? null,
       is_landlord: (profile as any).is_landlord ?? false,
       created_at: (profile as any).created_at ?? null,
+      username: (profile as any).username ?? null,
+      first_name: (profile as any).first_name ?? null,
+      last_name: (profile as any).last_name ?? null,
+      description: (profile as any).description ?? null,
+      profile_picture_url: (profile as any).profile_picture_url ?? null,
     };
 
     logListingApi('GET', '/api/listings/:id/landlord', id, true);

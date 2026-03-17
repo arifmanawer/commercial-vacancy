@@ -15,8 +15,10 @@ import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 type LandlordPublicInfo = {
   id: string;
   email: string | null;
-  is_landlord: boolean;
-  created_at: string | null;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  profile_picture_url: string | null;
 };
 
 type ListingDetails = {
@@ -63,6 +65,9 @@ export default function ListingPage() {
   const [error, setError] = useState<string | null>(null);
   const [landlordLoading, setLandlordLoading] = useState(false);
   const [landlordError, setLandlordError] = useState<string | null>(null);
+  const [landlordInfo, setLandlordInfo] = useState<LandlordPublicInfo | null>(
+    null,
+  );
   const [mapCenter, setMapCenter] =
     useState<google.maps.LatLngLiteral | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -165,35 +170,38 @@ export default function ListingPage() {
   useEffect(() => {
     if (!id) return;
     setLandlordError(null);
+    setLandlordInfo(null);
   }, [id]);
 
   useEffect(() => {
-    if (!id || !listing) return;
+    if (!id) return;
 
     let cancelled = false;
-
     async function loadLandlord() {
       setLandlordLoading(true);
       setLandlordError(null);
-
+      setLandlordInfo(null);
       try {
-        const res = await fetch(`${getApiUrl()}/api/listings/${id}/landlord`);
-        const body = (await res.json().catch(() => null)) as
-          | { success?: boolean; data?: LandlordPublicInfo; error?: string }
-          | null;
+        const { data, error } = await supabase
+          .rpc("get_listing_landlord_public", { listing_id: id })
+          .maybeSingle();
 
-        if (!res.ok || !body?.success || !body.data) {
+        if (error || !data) {
           if (!cancelled) {
-            setLandlordError(
-              body?.error || "Unable to load landlord details.",
-            );
+            setLandlordError(error?.message || "Unable to load landlord details.");
           }
           return;
         }
 
-      } catch {
         if (!cancelled) {
-          setLandlordError("Unable to load landlord details.");
+          setLandlordInfo({
+            id: data.id as string,
+            email: (data.email as string) ?? null,
+            username: (data.username as string) ?? null,
+            first_name: (data.first_name as string) ?? null,
+            last_name: (data.last_name as string) ?? null,
+            profile_picture_url: (data.profile_picture_url as string) ?? null,
+          });
         }
       } finally {
         if (!cancelled) setLandlordLoading(false);
@@ -205,7 +213,15 @@ export default function ListingPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, listing]);
+  }, [id]);
+
+  const landlordDisplayName =
+    [landlordInfo?.first_name, landlordInfo?.last_name]
+      .filter(Boolean)
+      .join(" ") ||
+    landlordInfo?.username ||
+    (landlordInfo?.email ? landlordInfo.email.split("@")[0] : null) ||
+    "Landlord";
 
   useEffect(() => {
     if (!mapsLoaded || !listing) return;
@@ -666,17 +682,37 @@ export default function ListingPage() {
                     Listed by
                   </p>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-200" />
+                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {landlordInfo?.profile_picture_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={landlordInfo.profile_picture_url}
+                          alt={landlordDisplayName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-600">
+                          {landlordDisplayName
+                            .split(" ")
+                            .map((p) => p[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                     <div>
                       <p className="text-sm font-medium text-slate-900">
-                        Landlord
+                        {landlordLoading ? "Loading…" : landlordDisplayName}
                       </p>
                       <p className="text-xs text-slate-500">
                         {landlordLoading
                           ? "Loading contact details…"
                           : landlordError
                             ? "Contact details unavailable"
-                            : "Messages you send here go directly to this landlord."}
+                            : landlordInfo?.email
+                              ? landlordInfo.email
+                              : "Messages you send here go directly to this landlord."}
                       </p>
                     </div>
                   </div>

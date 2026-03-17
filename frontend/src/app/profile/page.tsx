@@ -41,6 +41,7 @@ export default function ProfilePage() {
   const [address, setAddress] = useState("");
   const [description, setDescription] = useState("");
   const [profilePictureUrl, setProfilePictureUrl] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (!success) return;
@@ -56,6 +57,52 @@ export default function ProfilePage() {
     setDescription(profile?.description ?? "");
     setProfilePictureUrl(profile?.profile_picture_url ?? "");
   }, [profile]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user?.id) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${getApiUrl()}/api/profile/avatar`, {
+        method: "POST",
+        headers: {
+          "X-User-Id": user.id,
+        },
+        body: formData,
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string; data?: { profile_picture_url: string } }
+        | null;
+
+      if (!res.ok || !data?.success || !data.data?.profile_picture_url) {
+        throw new Error(data?.error || "Failed to upload profile picture");
+      }
+
+      setProfilePictureUrl(data.data.profile_picture_url);
+      await refreshProfile();
+      router.refresh();
+      setSuccess("Profile picture updated.");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message === "Failed to fetch"
+            ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
+            : err.message
+          : "Failed to upload profile picture.";
+      setError(msg);
+    } finally {
+      setAvatarUploading(false);
+      // clear the file input value so the same file can be reselected if needed
+      e.target.value = "";
+    }
+  };
 
   const handleRoleChange = async (roleId: string, checked: boolean) => {
     if (!user?.id || roleId === "renter") return;
@@ -214,6 +261,20 @@ export default function ProfilePage() {
                 {[firstName, lastName].filter(Boolean).join(" ") || username || user.email}
               </p>
               <p className="text-xs text-slate-500 truncate">Update your public profile info.</p>
+              <div className="mt-2">
+                <label className="inline-flex items-center text-xs font-medium text-slate-700 cursor-pointer">
+                  <span className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50">
+                    {avatarUploading ? "Uploading..." : "Change photo"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={avatarUploading}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 

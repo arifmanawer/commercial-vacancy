@@ -13,6 +13,143 @@ function logProfileApi(method: string, path: string, userId?: string, success?: 
 }
 
 /**
+ * GET /api/profiles/me
+ *
+ * Returns the full profile for the current user, including common fields
+ * shared across all roles.
+ */
+router.get<
+  unknown,
+  ApiResponse<{
+    id: string;
+    email: string | null;
+    is_landlord: boolean;
+    is_contractor: boolean;
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    address: string | null;
+    description: string | null;
+    profile_picture_url: string | null;
+  }> | ApiResponse
+>(
+  '/me',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
+
+    if (!userId) {
+      logProfileApi('GET', '/api/profiles/me', undefined, false, 'Missing user_id');
+      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select(
+        'id, email, is_landlord, is_contractor, username, first_name, last_name, address, description, profile_picture_url'
+      )
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      logProfileApi('GET', '/api/profiles/me', userId, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to load profile' });
+      return;
+    }
+
+    if (!data) {
+      logProfileApi('GET', '/api/profiles/me', userId, false, 'Profile not found');
+      res.status(404).json({ success: false, error: 'Profile not found' });
+      return;
+    }
+
+    logProfileApi('GET', '/api/profiles/me', userId, true);
+    res.json({ success: true, data: data as any });
+  })
+);
+
+/**
+ * PATCH /api/profiles/me
+ *
+ * Updates common profile fields for the current user.
+ * All fields are optional; only provided fields are updated.
+ */
+router.patch<
+  unknown,
+  ApiResponse<{
+    id: string;
+    email: string | null;
+    is_landlord: boolean;
+    is_contractor: boolean;
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    address: string | null;
+    description: string | null;
+    profile_picture_url: string | null;
+  }> | ApiResponse
+>(
+  '/me',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
+
+    if (!userId) {
+      logProfileApi('PATCH', '/api/profiles/me', undefined, false, 'Missing user_id');
+      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
+      return;
+    }
+
+    const {
+      username,
+      first_name,
+      last_name,
+      address,
+      description,
+      profile_picture_url,
+    } = req.body as {
+      username?: string | null;
+      first_name?: string | null;
+      last_name?: string | null;
+      address?: string | null;
+      description?: string | null;
+      profile_picture_url?: string | null;
+    };
+
+    const updates: Record<string, string | null | undefined> = {};
+
+    if (typeof username !== 'undefined') updates.username = username;
+    if (typeof first_name !== 'undefined') updates.first_name = first_name;
+    if (typeof last_name !== 'undefined') updates.last_name = last_name;
+    if (typeof address !== 'undefined') updates.address = address;
+    if (typeof description !== 'undefined') updates.description = description;
+    if (typeof profile_picture_url !== 'undefined') updates.profile_picture_url = profile_picture_url;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ success: false, error: 'No fields to update' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select(
+        'id, email, is_landlord, is_contractor, username, first_name, last_name, address, description, profile_picture_url'
+      )
+      .single();
+
+    if (error || !data) {
+      logProfileApi('PATCH', '/api/profiles/me', userId, false, error?.message || 'Unknown error');
+      res.status(500).json({ success: false, error: 'Failed to update profile' });
+      return;
+    }
+
+    logProfileApi('PATCH', '/api/profiles/me', userId, true);
+    res.json({ success: true, data: data as any });
+  })
+);
+
+/**
  * POST /api/profiles/upgrade-landlord
  *
  * Ensures a public.profiles row exists for the user and sets is_landlord=true.
@@ -49,7 +186,6 @@ router.post<
 
     const email = user.email ?? null;
 
-    // Upsert profile row. This backfills users created before the trigger existed.
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .upsert(

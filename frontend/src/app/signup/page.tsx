@@ -7,6 +7,7 @@ import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { supabase } from "../../lib/supabaseClient";
 import { logAuthEvent } from "../../lib/authLogger";
+import { getApiUrl } from "../../lib/api";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -15,7 +16,6 @@ export default function SignUpPage() {
   const [lastName, setLastName] = useState("");
   const [address, setAddress] = useState("");
   const [description, setDescription] = useState("");
-  const [profilePictureUrl, setProfilePictureUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -45,7 +45,6 @@ export default function SignUpPage() {
             last_name: lastName.trim() || null,
             address: address.trim() || null,
             description: description.trim() || null,
-            profile_picture_url: profilePictureUrl.trim() || null,
           },
         },
       });
@@ -59,8 +58,7 @@ export default function SignUpPage() {
         // This works even if email confirmation is required because the backend
         // only needs the user id (consistent with current API auth model).
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-          await fetch(`${apiUrl.replace(/\/+$/, "")}/api/profiles/me`, {
+          await fetch(`${getApiUrl()}/api/profiles/me`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
@@ -72,7 +70,6 @@ export default function SignUpPage() {
               last_name: lastName.trim() || null,
               address: address.trim() || null,
               description: description.trim() || null,
-              profile_picture_url: profilePictureUrl.trim() || null,
             }),
           });
         } catch {
@@ -158,18 +155,6 @@ export default function SignUpPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Tell us a bit about yourself..."
                 rows={4}
-                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              />
-            </label>
-
-            <label className="block mt-4">
-              <span className="text-sm text-slate-700">Profile picture URL</span>
-              <input
-                type="url"
-                required
-                value={profilePictureUrl}
-                onChange={(e) => setProfilePictureUrl(e.target.value)}
-                placeholder="https://..."
                 className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
               />
             </label>

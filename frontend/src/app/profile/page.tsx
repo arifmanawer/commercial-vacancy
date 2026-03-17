@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import { getApiUrl } from "@/lib/api";
 
 const ROLES = [
@@ -66,35 +67,42 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `avatars/${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from("profile_avatars")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
 
-      const res = await fetch(`${getApiUrl()}/api/profile/avatar`, {
-        method: "POST",
-        headers: {
-          "X-User-Id": user.id,
-        },
-        body: formData,
-      });
-
-      const data = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string; data?: { profile_picture_url: string } }
-        | null;
-
-      if (!res.ok || !data?.success || !data.data?.profile_picture_url) {
-        throw new Error(data?.error || "Failed to upload profile picture");
+      if (uploadError || !uploadData?.path) {
+        throw new Error(uploadError?.message || "Failed to upload profile picture");
       }
 
-      setProfilePictureUrl(data.data.profile_picture_url);
+      const { data: publicUrlData } = supabase.storage
+        .from("profile_avatars")
+        .getPublicUrl(uploadData.path);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ profile_picture_url: publicUrl })
+        .eq("id", user.id);
+
+      if (profileError) {
+        throw new Error(profileError.message || "Failed to save profile picture URL");
+      }
+
+      setProfilePictureUrl(publicUrl);
       await refreshProfile();
       router.refresh();
       setSuccess("Profile picture updated.");
     } catch (err) {
       const msg =
         err instanceof Error
-          ? err.message === "Failed to fetch"
-            ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
-            : err.message
+          ? err.message || "Failed to upload profile picture."
           : "Failed to upload profile picture.";
       setError(msg);
     } finally {
@@ -155,28 +163,20 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`${getApiUrl()}/api/profiles/me`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
-        },
-        body: JSON.stringify({
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
           username: username.trim() || null,
           first_name: firstName.trim() || null,
           last_name: lastName.trim() || null,
           address: address.trim() || null,
           description: description.trim() || null,
           profile_picture_url: profilePictureUrl.trim() || null,
-        }),
-      });
+        })
+        .eq("id", user.id);
 
-      const data = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
-        | null;
-
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || "Failed to update profile. Try again.");
+      if (updateError) {
+        throw new Error(updateError.message || "Failed to update profile. Try again.");
       }
 
       await refreshProfile();
@@ -345,18 +345,6 @@ export default function ProfilePage() {
               />
             </label>
 
-            <label className="block">
-              <span className="text-sm text-slate-700">Profile picture URL</span>
-              <input
-                type="url"
-                required
-                value={profilePictureUrl}
-                onChange={(e) => setProfilePictureUrl(e.target.value)}
-                placeholder="https://..."
-                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              />
-            </label>
-
             <div className="pt-2 flex items-center justify-end">
               <button
                 type="submit"
@@ -412,41 +400,51 @@ export default function ProfilePage() {
               </div>
 
               {/* Landlord & Contractor: selectable */}
-              {ROLES.slice(1).map((role) => {
-                const isChecked =
-                  (role.profileKey === "is_landlord" && isLandlord) ||
-                  (role.profileKey === "is_contractor" && isContractor);
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  isLandlord
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
+                    : "border-slate-200 hover:border-slate-300"
+                } ${updating ? "opacity-70 pointer-events-none" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isLandlord}
+                  disabled={updating}
+                  onChange={(e) => handleRoleChange("landlord", e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-slate-900">Landlord</span>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {isLandlord ? "Active" : "Inactive"}
+                  </span>
+                  <p className="mt-0.5 text-sm text-slate-600">{ROLES[1].description}</p>
+                </div>
+              </label>
 
-                return (
-                  <label
-                    key={role.id}
-                    className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                      isChecked
-                        ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
-                        : "border-slate-200 hover:border-slate-300"
-                    } ${updating ? "opacity-70 pointer-events-none" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={updating}
-                      onChange={(e) =>
-                        role.profileKey
-                          ? handleRoleChange(role.id, e.target.checked)
-                          : undefined
-                      }
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="font-medium text-slate-900">{role.label}</span>
-                      <span className="ml-2 text-xs text-slate-500">
-                        {isChecked ? "Active" : "Inactive"}
-                      </span>
-                      <p className="mt-0.5 text-sm text-slate-600">{role.description}</p>
-                    </div>
-                  </label>
-                );
-              })}
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  isContractor
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-muted)]"
+                    : "border-slate-200 hover:border-slate-300"
+                } ${updating ? "opacity-70 pointer-events-none" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isContractor}
+                  disabled={updating}
+                  onChange={(e) => handleRoleChange("contractor", e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[var(--brand)] focus:ring-[var(--brand)]"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-slate-900">Contractor</span>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {isContractor ? "Active" : "Inactive"}
+                  </span>
+                  <p className="mt-0.5 text-sm text-slate-600">{ROLES[2].description}</p>
+                </div>
+              </label>
             </div>
           </div>
 

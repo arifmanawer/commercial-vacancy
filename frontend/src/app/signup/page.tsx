@@ -7,7 +7,6 @@ import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { supabase } from "../../lib/supabaseClient";
 import { logAuthEvent } from "../../lib/authLogger";
-import { getApiUrl } from "../../lib/api";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -54,26 +53,32 @@ export default function SignUpPage() {
         return;
       }
       if (data.user) {
-        // Persist profile details to public.profiles via backend API (service role).
-        // This works even if email confirmation is required because the backend
-        // only needs the user id (consistent with current API auth model).
         try {
-          await fetch(`${getApiUrl()}/api/profiles/me`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              "X-User-Id": data.user.id,
-            },
-            body: JSON.stringify({
-              username: username.trim() || null,
-              first_name: firstName.trim() || null,
-              last_name: lastName.trim() || null,
-              address: address.trim() || null,
-              description: description.trim() || null,
-            }),
-          });
-        } catch {
-          // Best-effort: role/profile page can be updated later.
+          // Best-effort: if the user has an active session, update immediately.
+          // If email confirmation is enabled, there may be no session yet; in that
+          // case the DB trigger will copy auth metadata into public.profiles.
+          const hasSession = !!data.session;
+          if (hasSession) {
+            const { error: profileError } = await supabase
+              .from("profiles")
+              .update({
+                username: username.trim() || null,
+                first_name: firstName.trim() || null,
+                last_name: lastName.trim() || null,
+                address: address.trim() || null,
+                description: description.trim() || null,
+              })
+              .eq("id", data.user.id);
+
+            if (profileError) {
+              console.warn(
+                "Failed to save profile details on signup:",
+                profileError.message,
+              );
+            }
+          }
+        } catch (e) {
+          console.warn("Unexpected error saving profile on signup:", e);
         }
         logAuthEvent("signup", email, true);
         router.push("/");

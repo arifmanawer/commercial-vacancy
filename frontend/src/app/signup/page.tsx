@@ -10,7 +10,12 @@ import { logAuthEvent } from "../../lib/authLogger";
 
 export default function SignUpPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [profilePictureUrl, setProfilePictureUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,7 +37,17 @@ export default function SignUpPage() {
       const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: name } },
+        options: {
+          data: {
+            full_name: `${firstName} ${lastName}`.trim(),
+            username: username.trim() || null,
+            first_name: firstName.trim() || null,
+            last_name: lastName.trim() || null,
+            address: address.trim() || null,
+            description: description.trim() || null,
+            profile_picture_url: profilePictureUrl.trim() || null,
+          },
+        },
       });
       if (authError) {
         logAuthEvent("signup", email, false, authError.message);
@@ -40,6 +55,29 @@ export default function SignUpPage() {
         return;
       }
       if (data.user) {
+        // Persist profile details to public.profiles via backend API (service role).
+        // This works even if email confirmation is required because the backend
+        // only needs the user id (consistent with current API auth model).
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+          await fetch(`${apiUrl.replace(/\/+$/, "")}/api/profiles/me`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "X-User-Id": data.user.id,
+            },
+            body: JSON.stringify({
+              username: username.trim() || null,
+              first_name: firstName.trim() || null,
+              last_name: lastName.trim() || null,
+              address: address.trim() || null,
+              description: description.trim() || null,
+              profile_picture_url: profilePictureUrl.trim() || null,
+            }),
+          });
+        } catch {
+          // Best-effort: role/profile page can be updated later.
+        }
         logAuthEvent("signup", email, true);
         router.push("/");
         router.refresh();
@@ -67,12 +105,71 @@ export default function SignUpPage() {
             {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
 
             <label className="block">
-              <span className="text-sm text-slate-700">Full name</span>
+              <span className="text-sm text-slate-700">Username</span>
               <input
                 type="text"
                 required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. John Doe"
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+              <label className="block">
+                <span className="text-sm text-slate-700">First name</span>
+                <input
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-slate-700">Last name</span>
+                <input
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+            </div>
+
+            <label className="block mt-4">
+              <span className="text-sm text-slate-700">Address (optional)</span>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Street, City, State"
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <label className="block mt-4">
+              <span className="text-sm text-slate-700">Description</span>
+              <textarea
+                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Tell us a bit about yourself..."
+                rows={4}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <label className="block mt-4">
+              <span className="text-sm text-slate-700">Profile picture URL</span>
+              <input
+                type="url"
+                required
+                value={profilePictureUrl}
+                onChange={(e) => setProfilePictureUrl(e.target.value)}
+                placeholder="https://..."
                 className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
               />
             </label>

@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function AuthNav() {
   const router = useRouter();
-  const { user, loading, signOut, isLandlord, isContractor } = useAuth();
+  const { user, loading, signOut, isLandlord, isContractor, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -45,7 +45,12 @@ export default function AuthNav() {
   }
 
   if (user) {
-    const fullName = user.user_metadata?.full_name || user.email || "Account";
+    const fullName =
+      [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+      profile?.username ||
+      user.user_metadata?.full_name ||
+      user.email ||
+      "Account";
     const initials = fullName
       .split(/\s+/)
       .map((s) => s[0])

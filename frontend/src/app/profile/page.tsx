@@ -31,17 +31,31 @@ const ROLES = [
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, isLandlord, isContractor, loading: authLoading } = useAuth();
+  const { user, profile, isLandlord, isContractor, loading: authLoading, refreshProfile } = useAuth();
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const { refreshProfile } = useAuth();
+  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [address, setAddress] = useState("");
+  const [description, setDescription] = useState("");
+  const [profilePictureUrl, setProfilePictureUrl] = useState("");
 
   useEffect(() => {
     if (!success) return;
     const t = setTimeout(() => setSuccess(null), 4000);
     return () => clearTimeout(t);
   }, [success]);
+
+  useEffect(() => {
+    setUsername(profile?.username ?? "");
+    setFirstName(profile?.first_name ?? "");
+    setLastName(profile?.last_name ?? "");
+    setAddress(profile?.address ?? "");
+    setDescription(profile?.description ?? "");
+    setProfilePictureUrl(profile?.profile_picture_url ?? "");
+  }, [profile]);
 
   const handleRoleChange = async (roleId: string, checked: boolean) => {
     if (!user?.id || roleId === "renter") return;
@@ -81,6 +95,53 @@ export default function ProfilePage() {
             ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
             : err.message
           : "Failed to update role.";
+      setError(msg);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+    setUpdating(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/profiles/me`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify({
+          username: username.trim() || null,
+          first_name: firstName.trim() || null,
+          last_name: lastName.trim() || null,
+          address: address.trim() || null,
+          description: description.trim() || null,
+          profile_picture_url: profilePictureUrl.trim() || null,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to update profile. Try again.");
+      }
+
+      await refreshProfile();
+      router.refresh();
+      setSuccess("Profile updated.");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message === "Failed to fetch"
+            ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
+            : err.message
+          : "Failed to update profile.";
       setError(msg);
     } finally {
       setUpdating(false);
@@ -137,6 +198,115 @@ export default function ProfilePage() {
         <p className="mt-2 text-slate-600">
           Manage your account and roles.
         </p>
+
+        <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 space-y-5">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 rounded-full border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
+              {profilePictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profilePictureUrl} alt="Profile picture" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs text-slate-500">No photo</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">
+                {[firstName, lastName].filter(Boolean).join(" ") || username || user.email}
+              </p>
+              <p className="text-xs text-slate-500 truncate">Update your public profile info.</p>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600" role="alert">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-sm text-green-600" role="status">
+              {success}
+            </p>
+          )}
+
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <label className="block">
+              <span className="text-sm text-slate-700">Username</span>
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-sm text-slate-700">First name</span>
+                <input
+                  type="text"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-slate-700">Last name</span>
+                <input
+                  type="text"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-sm text-slate-700">Address (optional)</span>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm text-slate-700">Description</span>
+              <textarea
+                required
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm text-slate-700">Profile picture URL</span>
+              <input
+                type="url"
+                required
+                value={profilePictureUrl}
+                onChange={(e) => setProfilePictureUrl(e.target.value)}
+                placeholder="https://..."
+                className="mt-1 block w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+
+            <div className="pt-2 flex items-center justify-end">
+              <button
+                type="submit"
+                disabled={updating}
+                className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-60"
+              >
+                {updating ? "Saving..." : "Save profile"}
+              </button>
+            </div>
+          </form>
+        </section>
 
         <section className="mt-10 rounded-lg border border-slate-200 bg-white p-6 space-y-6">
           <div>

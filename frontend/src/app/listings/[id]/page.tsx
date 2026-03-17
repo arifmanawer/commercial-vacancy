@@ -15,12 +15,9 @@ import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 type LandlordPublicInfo = {
   id: string;
   email: string | null;
-  is_landlord: boolean;
-  created_at: string | null;
   username: string | null;
   first_name: string | null;
   last_name: string | null;
-  description: string | null;
   profile_picture_url: string | null;
 };
 
@@ -177,7 +174,7 @@ export default function ListingPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!listing?.landlord_user_id) return;
+    if (!id) return;
 
     let cancelled = false;
     async function loadLandlord() {
@@ -186,33 +183,24 @@ export default function ListingPage() {
       setLandlordInfo(null);
       try {
         const { data, error } = await supabase
-          .from("profiles")
-          .select(
-            "id, email, is_landlord, created_at, username, first_name, last_name, description, profile_picture_url",
-          )
-          .eq("id", listing.landlord_user_id)
+          .rpc("get_listing_landlord_public", { listing_id: id })
           .maybeSingle();
 
         if (error || !data) {
           if (!cancelled) {
-            setLandlordError(
-              error?.message || "Unable to load landlord details.",
-            );
+            setLandlordError(error?.message || "Unable to load landlord details.");
           }
           return;
         }
 
         if (!cancelled) {
           setLandlordInfo({
-            id: data.id,
-            email: data.email ?? null,
-            is_landlord: data.is_landlord ?? false,
-            created_at: data.created_at ?? null,
-            username: data.username ?? null,
-            first_name: data.first_name ?? null,
-            last_name: data.last_name ?? null,
-            description: data.description ?? null,
-            profile_picture_url: data.profile_picture_url ?? null,
+            id: data.id as string,
+            email: (data.email as string) ?? null,
+            username: (data.username as string) ?? null,
+            first_name: (data.first_name as string) ?? null,
+            last_name: (data.last_name as string) ?? null,
+            profile_picture_url: (data.profile_picture_url as string) ?? null,
           });
         }
       } finally {
@@ -225,7 +213,7 @@ export default function ListingPage() {
     return () => {
       cancelled = true;
     };
-  }, [listing?.landlord_user_id]);
+  }, [id]);
 
   const landlordDisplayName =
     [landlordInfo?.first_name, landlordInfo?.last_name]

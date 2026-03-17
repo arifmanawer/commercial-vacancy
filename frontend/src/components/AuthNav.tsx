@@ -74,8 +74,17 @@ export default function AuthNav() {
           aria-haspopup="true"
           aria-label="Account menu"
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/10 text-xs font-semibold text-[var(--brand)]">
-            {initials}
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/10 text-xs font-semibold text-[var(--brand)] overflow-hidden">
+            {profile?.profile_picture_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.profile_picture_url}
+                alt={typeof fullName === "string" ? fullName : "Account"}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials
+            )}
           </span>
           <span className="hidden max-w-[120px] truncate text-[13px] text-slate-700 sm:inline-block">
             {typeof fullName === "string" ? fullName.split("@")[0] : fullName}

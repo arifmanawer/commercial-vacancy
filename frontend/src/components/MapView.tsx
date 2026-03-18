@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   GoogleMap,
   Marker,
@@ -43,7 +43,7 @@ const containerStyle = {
   height: "100%",
 };
 
-type GeocodedListing = {
+export type GeocodedListing = {
   id: string;
   title: string;
   address: string;
@@ -53,7 +53,46 @@ type GeocodedListing = {
   position: google.maps.LatLngLiteral;
 };
 
-export default function MapView() {
+export type NearbyListingSummary = {
+  id: string;
+  title: string;
+  address: string;
+  city: string;
+  state: string;
+  property_type: string;
+  distanceMiles: number;
+};
+
+const EARTH_RADIUS_MILES = 3958.8;
+
+function distanceInMiles(
+  a: google.maps.LatLngLiteral,
+  b: google.maps.LatLngLiteral
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+
+  const haversine =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+
+  const c = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+  return EARTH_RADIUS_MILES * c;
+}
+
+type MapViewProps = {
+  onNearbyChange?: (nearby: NearbyListingSummary[]) => void;
+};
+
+export default function MapView({ onNearbyChange }: MapViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [center, setCenter] = useState<google.maps.LatLngLiteral>(DEFAULT_CENTER);
   const [searchLocation, setSearchLocation] =
@@ -62,6 +101,8 @@ export default function MapView() {
     useState<google.maps.places.Autocomplete | null>(null);
   const [listings, setListings] = useState<GeocodedListing[]>([]);
   const [loadingListings, setLoadingListings] = useState(true);
+  const [userLocation, setUserLocation] =
+    useState<google.maps.LatLngLiteral | null>(null);
 
   const { isLoaded } = useGoogleMapsLoader();
 
@@ -131,6 +172,30 @@ export default function MapView() {
     fetchAndGeocode();
   }, [isLoaded]);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!("geolocation" in navigator)) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location: google.maps.LatLngLiteral = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserLocation(location);
+        setCenter(location);
+      },
+      (error) => {
+        console.warn("Unable to retrieve user location:", error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 60_000,
+        timeout: 10_000,
+      }
+    );
+  }, [isLoaded]);
+
   const handlePlaceChanged = () => {
     if (!autocomplete) return;
     const place = autocomplete.getPlace();
@@ -152,6 +217,49 @@ export default function MapView() {
     setSearchLocation(location);
     setActiveId(null);
   };
+
+  const nearbyListings = useMemo(() => {
+    if (!userLocation) return [];
+
+    return listings
+      .map((listing) => ({
+        ...listing,
+        distanceMiles: distanceInMiles(userLocation, listing.position),
+      }))
+      .filter((listing) => listing.distanceMiles <= 5)
+      .sort((a, b) => a.distanceMiles - b.distanceMiles);
+  }, [listings, userLocation]);
+
+  const nearbyListingIds = useMemo(
+    () => new Set(nearbyListings.map((listing) => listing.id)),
+    [nearbyListings]
+  );
+
+  useEffect(() => {
+    if (!onNearbyChange) return;
+
+    onNearbyChange(
+      nearbyListings.map(
+        ({
+          id,
+          title,
+          address,
+          city,
+          state,
+          property_type,
+          distanceMiles,
+        }) => ({
+          id,
+          title,
+          address,
+          city,
+          state,
+          property_type,
+          distanceMiles,
+        })
+      )
+    );
+  }, [nearbyListings, onNearbyChange]);
 
   if (!isLoaded) {
     return (
@@ -195,6 +303,13 @@ export default function MapView() {
           <Marker
             key={space.id}
             position={space.position}
+            icon={
+              nearbyListingIds.has(space.id)
+                ? {
+                    url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                  }
+                : undefined
+            }
             onClick={() => setActiveId(space.id)}
           >
             {activeId === space.id && (
@@ -213,6 +328,15 @@ export default function MapView() {
             )}
           </Marker>
         ))}
+
+        {userLocation && (
+          <Marker
+            position={userLocation}
+            icon={{
+              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+            }}
+          />
+        )}
 
         {searchLocation && (
           <Marker

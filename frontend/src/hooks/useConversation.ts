@@ -23,6 +23,7 @@ export function useConversation(conversationId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [latestOffer, setLatestOffer] = useState<any | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,7 +47,11 @@ export function useConversation(conversationId: string | null) {
         );
 
         const json = (await res.json().catch(() => null)) as
-          | { success?: boolean; data?: ConversationResponse; error?: string }
+          | {
+              success?: boolean;
+              data?: ConversationResponse & { latestOffer?: any };
+              error?: string;
+            }
           | null;
 
         if (!res.ok || !json?.success || !json.data) {
@@ -59,6 +64,7 @@ export function useConversation(conversationId: string | null) {
         if (!cancelled) {
           setConversation(json.data.conversation);
           setMessages(json.data.messages);
+          setLatestOffer(json.data.latestOffer ?? null);
         }
       } catch (_err) {
         if (!cancelled) {
@@ -115,6 +121,6 @@ export function useConversation(conversationId: string | null) {
     };
   }, [conversationId]);
 
-  return { conversation, messages, setMessages, loading, error };
+  return { conversation, messages, setMessages, latestOffer, setLatestOffer, loading, error };
 }
 

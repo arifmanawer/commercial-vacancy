@@ -20,6 +20,8 @@ type ListingFormInput = {
   price: string | number;
   security_deposit?: string | number;
   rental_type: string;
+   min_duration: string | number;
+   max_duration: string | number;
   photos?: File[];
 };
 
@@ -49,6 +51,19 @@ export default function ListPage() {
               city: data.city,
               state: data.state,
               zip_code: data.zip_code,
+              rate_type: String(data.rental_type || "").toLowerCase() || null,
+              rate_amount:
+                data.price !== "" && data.price != null
+                  ? Number(data.price)
+                  : null,
+              min_duration:
+                data.min_duration !== "" && data.min_duration != null
+                  ? Number(data.min_duration)
+                  : null,
+              max_duration:
+                data.max_duration !== "" && data.max_duration != null
+                  ? Number(data.max_duration)
+                  : null,
             },
           ])
         .select()

@@ -13,8 +13,8 @@ type SavedListing = {
   city?: string | null;
   state?: string | null;
   property_type?: string | null;
-  price?: number | null;
-  rental_type?: string | null;
+  rate_amount?: number | null;
+  rate_type?: string | null;
   image?: string | null;
 };
 
@@ -65,7 +65,9 @@ export default function RenterDashboardPage() {
 
         const { data: listingRows, error: listingsError } = await supabase
           .from("listings")
-          .select("id, title, city, state, property_type")
+          .select(
+            "id, title, city, state, property_type, rate_type, rate_amount, min_duration, max_duration",
+          )
           .in("id", propertyIds);
 
         if (listingsError) {
@@ -75,32 +77,24 @@ export default function RenterDashboardPage() {
           return;
         }
 
-        const { data: priceRows } = await supabase
-          .from("property_pricing")
-          .select("property_id, price, rental_type")
-          .in("property_id", propertyIds);
-
         const { data: imgRows } = await supabase
           .from("listings_images")
           .select("property_id, image_url")
           .in("property_id", propertyIds);
 
-        const priceMap = new Map<string, any>();
-        (priceRows ?? []).forEach((p: any) => priceMap.set(p.property_id, p));
         const imgMap = new Map<string, any>();
         (imgRows ?? []).forEach((r: any) => imgMap.set(r.property_id, r));
 
         const view: SavedListing[] =
           listingRows?.map((r: any) => {
-            const pricing = priceMap.get(r.id);
             return {
               id: r.id,
               title: r.title,
               city: r.city,
               state: r.state,
               property_type: r.property_type,
-              price: pricing ? pricing.price : null,
-              rental_type: pricing ? pricing.rental_type : null,
+              rate_amount: r.rate_amount ?? null,
+              rate_type: r.rate_type ?? null,
               image: imgMap.get(r.id)?.image_url?.[0] ?? null,
             };
           }) ?? [];
@@ -501,8 +495,8 @@ export default function RenterDashboardPage() {
                       {listing.property_type ?? ""}
                     </p>
                     <p className="mt-1 text-sm font-medium text-slate-900">
-                      {listing.price != null && listing.rental_type
-                        ? `${listing.price}/${listing.rental_type}`
+                      {listing.rate_amount != null && listing.rate_type
+                        ? `$${listing.rate_amount}/${listing.rate_type}`
                         : ""}
                     </p>
                     <div className="mt-3">

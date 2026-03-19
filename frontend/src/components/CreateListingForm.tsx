@@ -2,9 +2,9 @@
 "use client";
 import { useState } from "react";
 
-// Property type and rental_type enums from schema
+// Property type and rate_type enums from schema
 const PROPERTY_TYPES = ["Apartment", "House", "Commercial", "Office", "Studio"];
-const RENTAL_TYPES = ["Daily", "Weekly", "Monthly", "Yearly"];
+const RATE_TYPES = ["hourly", "daily", "weekly", "monthly"];
 
 export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) => Promise<void> | void }) {
   const [form, setForm] = useState({
@@ -17,7 +17,9 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
     zip_code: "",
     price: "",
     security_deposit: "",
-    rental_type: RENTAL_TYPES[0],
+    rental_type: RATE_TYPES[1],
+    min_duration: "",
+    max_duration: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -152,14 +154,14 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
           />
         </div>
         <div>
-          <label className="block text-slate-700 font-semibold mb-1">Rental Type</label>
+          <label className="block text-slate-700 font-semibold mb-1">Rate Type</label>
           <select
             name="rental_type"
             value={form.rental_type}
             onChange={handleChange}
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
           >
-            {RENTAL_TYPES.map((type) => (
+            {RATE_TYPES.map((type) => (
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
@@ -168,7 +170,7 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-slate-700 font-semibold mb-1">Price</label>
+          <label className="block text-slate-700 font-semibold mb-1">Price per unit</label>
           <input
             name="price"
             type="number"
@@ -176,7 +178,7 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
             onChange={handleChange}
             required
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
-            placeholder="e.g. 1000"
+            placeholder="e.g. 100"
           />
         </div>
         <div>
@@ -189,6 +191,43 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
             placeholder="e.g. 500"
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Minimum duration
+          </label>
+          <input
+            name="min_duration"
+            type="number"
+            value={form.min_duration}
+            onChange={handleChange}
+            required
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
+            placeholder="e.g. 1"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Minimum number of {form.rental_type || "time units"} per booking.
+          </p>
+        </div>
+        <div>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Maximum duration
+          </label>
+          <input
+            name="max_duration"
+            type="number"
+            value={form.max_duration}
+            onChange={handleChange}
+            required
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
+            placeholder="e.g. 30"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Maximum number of {form.rental_type || "time units"} per booking.
+          </p>
         </div>
       </div>
 

@@ -29,9 +29,11 @@ type ListingDetails = {
   city: string | null;
   state: string | null;
   property_type: string | null;
-  price: number | null;
-  rental_type: string | null;
+  rate_amount: number | null;
+  rate_type: string | null;
   security_deposit: number | null;
+  min_duration: number | null;
+  max_duration: number | null;
   images: string[];
   landlord_user_id: string | null;
 };
@@ -88,32 +90,60 @@ export default function ListingPage() {
       setListing(null);
 
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8ebdf7',
+          },
+          body: JSON.stringify({
+            sessionId: '8ebdf7',
+            runId: 'pre-fix-2',
+            hypothesisId: 'H1',
+            location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:entry',
+            message: 'Entering loadListing',
+            data: { id },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
+
         const { data: listingRow, error: listingError } = await supabase
           .from("listings")
           .select(
-            "id, title, description, address, city, state, property_type, user_id",
+            "id, title, description, address, city, state, property_type, user_id, rate_type, rate_amount, min_duration, max_duration",
           )
           .eq("id", id)
           .maybeSingle();
 
         if (listingError || !listingRow) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Debug-Session-Id': '8ebdf7',
+            },
+            body: JSON.stringify({
+              sessionId: '8ebdf7',
+              runId: 'pre-fix-2',
+              hypothesisId: 'H2',
+              location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:query:failed',
+              message: 'Listings row missing or query failed',
+              data: {
+                hasError: Boolean(listingError),
+                errorMessage: listingError?.message ?? null,
+                rowExists: Boolean(listingRow),
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion agent log
+
           if (!cancelled) setNotFound(true);
           return;
         }
-
-        const { data: pricingRows, error: pricingError } = await supabase
-          .from("property_pricing")
-          .select("price, rental_type, security_deposit")
-          .eq("property_id", id)
-          .order("id", { ascending: false })
-          .limit(1);
-
-        if (pricingError) {
-          console.warn("pricing fetch error", pricingError.message);
-        }
-
-        const pricing =
-          pricingRows && pricingRows.length > 0 ? pricingRows[0] : null;
 
         const { data: imgRows, error: imgError } = await supabase
           .from("listings_images")
@@ -142,9 +172,11 @@ export default function ListingPage() {
             city: listingRow.city ?? null,
             state: listingRow.state ?? null,
             property_type: listingRow.property_type ?? null,
-            price: pricing?.price ?? null,
-            rental_type: pricing?.rental_type ?? null,
-            security_deposit: pricing?.security_deposit ?? null,
+            rate_amount: listingRow.rate_amount ?? null,
+            rate_type: listingRow.rate_type ?? null,
+            security_deposit: null,
+            min_duration: listingRow.min_duration ?? null,
+            max_duration: listingRow.max_duration ?? null,
             images,
             landlord_user_id:
               typeof listingRow.user_id === "string"
@@ -156,6 +188,24 @@ export default function ListingPage() {
         }
       } catch {
         if (!cancelled) setNotFound(true);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8ebdf7',
+          },
+          body: JSON.stringify({
+            sessionId: '8ebdf7',
+            runId: 'pre-fix-2',
+            hypothesisId: 'H3',
+            location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:catch',
+            message: 'Unexpected exception while loading listing',
+            data: {},
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -316,6 +366,27 @@ export default function ListingPage() {
       setFeedback(null);
       setError(null);
       setStartingConversation(true);
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "e74c3e",
+        },
+        body: JSON.stringify({
+          sessionId: "e74c3e",
+          runId: "debug-preflight",
+          hypothesisId: "H2_CORS_OR_NETWORK_OR_WRONG_PORT",
+          location: "src/app/listings/[id]/page.tsx:startMessageThread",
+          message: "Starting message thread fetch",
+          data: {
+            apiUrl: getApiUrl(),
+            hasListingLandlordUserId: Boolean(listing.landlord_user_id),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
         method: "POST",
         headers: {
@@ -334,6 +405,29 @@ export default function ListingPage() {
         | null;
 
       if (!res.ok || !json?.success || !json.data) {
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "e74c3e",
+          },
+          body: JSON.stringify({
+            sessionId: "e74c3e",
+            runId: "debug-preflight",
+            hypothesisId: "H3_BACKEND_RESPONSE_ERROR",
+            location: "src/app/listings/[id]/page.tsx:startMessageThread",
+            message: "Received non-ok backend response starting conversation",
+            data: {
+              status: res.status,
+              statusText: res.statusText,
+              backendSuccess: json?.success,
+              backendError: json?.error,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         console.error("Failed to start conversation", json?.error);
         setError("Unable to start message. Please try again.");
         return;
@@ -341,6 +435,27 @@ export default function ListingPage() {
 
       router.push(`/messages/${json.data.id}`);
     } catch (err) {
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "e74c3e",
+        },
+        body: JSON.stringify({
+          sessionId: "e74c3e",
+          runId: "debug-preflight",
+          hypothesisId: "H1_WRONG_API_URL_PORT_OR_CORS",
+          location: "src/app/listings/[id]/page.tsx:startMessageThread",
+          message: "Fetch threw (network/CORS/etc.) starting conversation",
+          data: {
+            errorName: (err as any)?.name,
+            errorMessage: (err as any)?.message || String(err),
+          },
+          timestamp: Date.now(),
+        }),
+      });
+      // #endregion
       console.error(err);
       setError("Unable to start message. Please try again.");
     } finally {
@@ -511,17 +626,19 @@ export default function ListingPage() {
                 <div>
                   <span className="block text-sm text-slate-500">Price</span>
                   <span className="text-lg font-semibold text-slate-900">
-                    {listing.price != null && listing.rental_type
-                      ? `${formatMoney(listing.price)}/${listing.rental_type}`
+                    {listing.rate_amount != null && listing.rate_type
+                      ? `${formatMoney(listing.rate_amount)}/${listing.rate_type}`
                       : "—"}
                   </span>
                 </div>
                 <div>
                   <span className="block text-sm text-slate-500">
-                    Security deposit
+                    Duration range
                   </span>
                   <span className="text-lg font-semibold text-slate-900">
-                    {formatMoney(listing.security_deposit)}
+                    {listing.min_duration != null && listing.max_duration != null
+                      ? `${listing.min_duration}–${listing.max_duration} ${listing.rate_type ?? ""}`
+                      : "—"}
                   </span>
                 </div>
               </div>
@@ -738,8 +855,16 @@ export default function ListingPage() {
                   Leasing Info
                 </h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Rental type: {listing.rental_type ?? "—"} · Security deposit:{" "}
-                  {formatMoney(listing.security_deposit)}
+                  Rental type: {listing.rate_type ?? "—"} · Duration range:{" "}
+                  {listing.min_duration != null && listing.max_duration != null
+                    ? `${listing.min_duration}–${listing.max_duration} ${listing.rate_type ?? ""}`
+                    : "—"}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">
+                  Conversations started from this listing are for information and planning only.
+                  A binding rental agreement is only created when you accept a formal offer and complete
+                  payment through Commercial Vacancy, under the platform&apos;s terms and any refund policy
+                  shown in the app.
                 </p>
               </div>
             </div>

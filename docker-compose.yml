@@ -14,6 +14,8 @@ services:
       - FRONTEND_URL=http://localhost:3000
     volumes:
       - ./backend:/app
+      # Keep container-managed node_modules (bind-mounting host node_modules can
+      # cause filesystem/permission issues in Docker Desktop).
       - /app/node_modules
     restart: unless-stopped
 

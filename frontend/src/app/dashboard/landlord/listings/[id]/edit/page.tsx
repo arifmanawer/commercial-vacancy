@@ -16,9 +16,10 @@ type EditFormState = {
   state: string;
   zip_code: string;
   property_type: string;
-  price: string;
-  security_deposit: string;
-  rental_type: string;
+  rate_amount: string;
+  rate_type: string;
+  min_duration: string;
+  max_duration: string;
   status: string;
 };
 
@@ -45,7 +46,7 @@ export default function EditListingPage() {
       const { data: listingRow, error: listingError } = await supabase
         .from("listings")
         .select(
-          "id, user_id, title, description, address, city, state, zip_code, property_type, status",
+          "id, user_id, title, description, address, city, state, zip_code, property_type, status, rate_type, rate_amount, min_duration, max_duration",
         )
         .eq("id", id)
         .maybeSingle();
@@ -70,23 +71,6 @@ export default function EditListingPage() {
         return;
       }
 
-      const { data: pricingRows, error: pricingError } = await supabase
-        .from("property_pricing")
-        .select("price, rental_type, security_deposit")
-        .eq("property_id", id)
-        .order("id", { ascending: false })
-        .limit(1);
-
-      if (cancelled) return;
-
-      if (pricingError) {
-        setError(pricingError.message);
-        setLoading(false);
-        return;
-      }
-
-      const pricing = pricingRows && pricingRows.length > 0 ? pricingRows[0] : null;
-
       setForm({
         title: listingRow.title ?? "",
         description: listingRow.description ?? "",
@@ -95,12 +79,13 @@ export default function EditListingPage() {
         state: listingRow.state ?? "",
         zip_code: listingRow.zip_code ?? "",
         property_type: listingRow.property_type ?? "",
-        price: pricing?.price != null ? String(pricing.price) : "",
-        security_deposit:
-          pricing?.security_deposit != null
-            ? String(pricing.security_deposit)
-            : "",
-        rental_type: pricing?.rental_type ?? "",
+        rate_amount:
+          listingRow.rate_amount != null ? String(listingRow.rate_amount) : "",
+        rate_type: listingRow.rate_type ?? "",
+        min_duration:
+          listingRow.min_duration != null ? String(listingRow.min_duration) : "",
+        max_duration:
+          listingRow.max_duration != null ? String(listingRow.max_duration) : "",
         status: listingRow.status ?? "",
       });
       setLoading(false);
@@ -153,56 +138,35 @@ export default function EditListingPage() {
         return;
       }
 
-      const priceValue =
-        form.price.trim() === "" ? null : Number.parseFloat(form.price);
-      const securityValue =
-        form.security_deposit.trim() === ""
-          ? null
-          : Number.parseFloat(form.security_deposit);
+    const rateAmount =
+      form.rate_amount.trim() === ""
+        ? null
+        : Number.parseFloat(form.rate_amount);
+    const minDuration =
+      form.min_duration.trim() === ""
+        ? null
+        : Number.parseInt(form.min_duration, 10);
+    const maxDuration =
+      form.max_duration.trim() === ""
+        ? null
+        : Number.parseInt(form.max_duration, 10);
 
-      const { data: existingPricingRows } = await supabase
-        .from("property_pricing")
-        .select("id")
-        .eq("property_id", id)
-        .order("id", { ascending: false })
-        .limit(1);
+    const { error: pricingUpdateError } = await supabase
+      .from("listings")
+      .update({
+        rate_type: form.rate_type || null,
+        rate_amount: rateAmount,
+        min_duration: minDuration,
+        max_duration: maxDuration,
+      })
+      .eq("id", id)
+      .eq("user_id", user.id);
 
-      const hasPricing = existingPricingRows && existingPricingRows.length > 0;
-
-      if (hasPricing) {
-        const pricingId = existingPricingRows[0].id;
-        const { error: pricingUpdateError } = await supabase
-          .from("property_pricing")
-          .update({
-            price: priceValue,
-            security_deposit: securityValue,
-            rental_type: form.rental_type || null,
-          })
-          .eq("id", pricingId);
-
-        if (pricingUpdateError) {
-          setError(pricingUpdateError.message);
-          setSaving(false);
-          return;
-        }
-      } else if (priceValue != null) {
-        const { error: pricingInsertError } = await supabase
-          .from("property_pricing")
-          .insert([
-            {
-              property_id: id,
-              price: priceValue,
-              security_deposit: securityValue,
-              rental_type: form.rental_type || null,
-            },
-          ]);
-
-        if (pricingInsertError) {
-          setError(pricingInsertError.message);
-          setSaving(false);
-          return;
-        }
-      }
+    if (pricingUpdateError) {
+      setError(pricingUpdateError.message);
+      setSaving(false);
+      return;
+    }
 
       router.push("/dashboard/landlord");
     } catch (err: any) {
@@ -373,11 +337,11 @@ export default function EditListingPage() {
               </div>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  Rental Type
+                  Rate Type
                 </label>
                 <input
-                  name="rental_type"
-                  value={form.rental_type}
+                  name="rate_type"
+                  value={form.rate_type}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
                 />
@@ -387,24 +351,40 @@ export default function EditListingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  Price
+                  Price per unit
                 </label>
                 <input
-                  name="price"
+                  name="rate_amount"
                   type="number"
-                  value={form.price}
+                  value={form.rate_amount}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
+                />
+              </div>
+              <div />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Minimum duration
+                </label>
+                <input
+                  name="min_duration"
+                  type="number"
+                  value={form.min_duration}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
                 />
               </div>
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  Security Deposit
+                  Maximum duration
                 </label>
                 <input
-                  name="security_deposit"
+                  name="max_duration"
                   type="number"
-                  value={form.security_deposit}
+                  value={form.max_duration}
                   onChange={handleChange}
                   className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
                 />

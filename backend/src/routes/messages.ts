@@ -38,6 +38,8 @@ interface ConversationSummary {
   context_type: ConversationContextType;
   context_listing_id: string | null;
   context_contractor_id: string | null;
+  context_listing_title: string | null;
+  context_listing_address: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
   participants: {
@@ -45,6 +47,14 @@ interface ConversationSummary {
     role: string | null;
   }[];
   unread_count: number;
+}
+
+interface ListingBasic {
+  id: string;
+  title: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
 }
 
 interface MessageApiModel {
@@ -73,6 +83,31 @@ function getUserId(req: Request): string | null {
   const queryId = req.query.user_id;
   const id = (headerId as string) || (queryId as string) || '';
   return id || null;
+}
+
+async function fetchListingMap(listingIds: string[]): Promise<Map<string, ListingBasic>> {
+  const map = new Map<string, ListingBasic>();
+  const unique = [...new Set(listingIds.filter(Boolean))];
+  if (!unique.length) return map;
+
+  const { data } = await supabaseAdmin
+    .from<ListingBasic>('listings')
+    .select('id, title, address, city, state')
+    .in('id', unique);
+
+  for (const row of data ?? []) {
+    map.set(row.id, row);
+  }
+  return map;
+}
+
+function listingLabel(listing: ListingBasic | undefined): { title: string | null; address: string | null } {
+  if (!listing) return { title: null, address: null };
+  const parts = [listing.address, listing.city, listing.state].filter(Boolean);
+  return {
+    title: listing.title || null,
+    address: parts.length ? parts.join(', ') : null,
+  };
 }
 
 /**
@@ -177,6 +212,11 @@ router.get<
       return;
     }
 
+    const listingIds = (conversationRows ?? [])
+      .map((c) => c.context_listing_id)
+      .filter((id): id is string => !!id);
+    const listingMap = await fetchListingMap(listingIds);
+
     const summaries: ConversationSummary[] = (conversationRows ?? []).map((conv) => {
       const participantsForConversation = (allParticipants ?? []).filter(
         (p) => p.conversation_id === conv.id
@@ -194,11 +234,16 @@ router.get<
           m.sender_id !== userId
       );
 
+      const listing = conv.context_listing_id ? listingMap.get(conv.context_listing_id) : undefined;
+      const { title: lTitle, address: lAddr } = listingLabel(listing);
+
       return {
         id: conv.id,
         context_type: conv.context_type,
         context_listing_id: conv.context_listing_id,
         context_contractor_id: conv.context_contractor_id,
+        context_listing_title: lTitle,
+        context_listing_address: lAddr,
         last_message_at: conv.last_message_at,
         last_message_preview: conv.last_message_preview,
         participants: participantsForConversation.map((p) => ({
@@ -426,11 +471,21 @@ router.post<
         m.sender_id !== userId
     );
 
+    const postListingMap = await fetchListingMap(
+      conversation.context_listing_id ? [conversation.context_listing_id] : []
+    );
+    const postListing = conversation.context_listing_id
+      ? postListingMap.get(conversation.context_listing_id)
+      : undefined;
+    const { title: postLTitle, address: postLAddr } = listingLabel(postListing);
+
     const summary: ConversationSummary = {
       id: conversation.id,
       context_type: conversation.context_type,
       context_listing_id: conversation.context_listing_id,
       context_contractor_id: conversation.context_contractor_id,
+      context_listing_title: postLTitle,
+      context_listing_address: postLAddr,
       last_message_at: conversation.last_message_at,
       last_message_preview: conversation.last_message_preview,
       participants: (participants ?? []).map((p) => ({
@@ -570,11 +625,21 @@ router.get<
         m.sender_id !== userId
     );
 
+    const detailListingMap = await fetchListingMap(
+      conversation.context_listing_id ? [conversation.context_listing_id] : []
+    );
+    const detailListing = conversation.context_listing_id
+      ? detailListingMap.get(conversation.context_listing_id)
+      : undefined;
+    const { title: detailLTitle, address: detailLAddr } = listingLabel(detailListing);
+
     const summary: ConversationSummary = {
       id: conversation.id,
       context_type: conversation.context_type,
       context_listing_id: conversation.context_listing_id,
       context_contractor_id: conversation.context_contractor_id,
+      context_listing_title: detailLTitle,
+      context_listing_address: detailLAddr,
       last_message_at: conversation.last_message_at,
       last_message_preview: conversation.last_message_preview,
       participants: (participants ?? []).map((p) => ({

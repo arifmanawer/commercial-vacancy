@@ -298,7 +298,7 @@ export default function ProfilePage() {
 
       <main className="max-w-2xl mx-auto px-6 py-16">
         <Link
-          href="/dashboard/renter"
+          href={isLandlord ? "/dashboard/landlord" : isContractor ? "/dashboard/contractor" : "/dashboard/renter"}
           className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded mb-6"
         >
           ← Back to dashboard

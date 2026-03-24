@@ -83,9 +83,9 @@ export default function SignInPage() {
                 <span className="ml-2">Remember me</span>
               </label>
 
-              <span className="text-sm text-slate-400 cursor-default" title="Coming soon">
+              <Link href="/forgot" className="text-sm text-slate-700 hover:underline">
                 Forgot password?
-              </span>
+              </Link>
             </div>
 
             <div className="mt-6 flex flex-col sm:flex-row gap-3">

@@ -103,6 +103,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
   const [loadingListings, setLoadingListings] = useState(true);
   const [userLocation, setUserLocation] =
     useState<google.maps.LatLngLiteral | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
   const { isLoaded } = useGoogleMapsLoader();
 
@@ -176,7 +177,10 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
     if (!isLoaded) return;
     if (!("geolocation" in navigator)) return;
 
-    navigator.geolocation.getCurrentPosition(
+    setGeoError(null);
+
+    // Use watchPosition so we don't fail if the first GPS fix is slow.
+    const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const location: google.maps.LatLngLiteral = {
           lat: position.coords.latitude,
@@ -187,13 +191,18 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
       },
       (error) => {
         console.warn("Unable to retrieve user location:", error);
+        setGeoError(error.message || "Unable to retrieve user location");
       },
       {
         enableHighAccuracy: true,
         maximumAge: 60_000,
-        timeout: 10_000,
+        timeout: 30_000,
       }
     );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, [isLoaded]);
 
   const handlePlaceChanged = () => {
@@ -276,6 +285,11 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
           Syncing listings...
         </div>
       )}
+      {geoError && (
+        <div className="absolute inset-x-0 top-0 z-30 mx-auto w-[min(480px,90%)] mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 shadow-sm">
+          {geoError}
+        </div>
+      )}
       <GoogleMap
         center={center}
         zoom={12}
@@ -306,7 +320,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
             icon={
               nearbyListingIds.has(space.id)
                 ? {
-                    url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
                   }
                 : undefined
             }
@@ -333,7 +347,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
           <Marker
             position={userLocation}
             icon={{
-              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+              url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
             }}
           />
         )}
@@ -342,7 +356,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
           <Marker
             position={searchLocation}
             icon={{
-              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+              url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
             }}
           />
         )}

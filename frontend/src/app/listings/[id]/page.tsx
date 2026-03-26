@@ -194,13 +194,24 @@ export default function ListingPage() {
         }
 
         if (!cancelled) {
+          // Supabase RPC typing defaults to `{}` unless we provide a generic type.
+          // Cast to the fields we actually expect from `get_listing_landlord_public`.
+          const landlord = data as {
+            id: string;
+            email?: string | null;
+            username?: string | null;
+            first_name?: string | null;
+            last_name?: string | null;
+            profile_picture_url?: string | null;
+          };
+
           setLandlordInfo({
-            id: data.id as string,
-            email: (data.email as string) ?? null,
-            username: (data.username as string) ?? null,
-            first_name: (data.first_name as string) ?? null,
-            last_name: (data.last_name as string) ?? null,
-            profile_picture_url: (data.profile_picture_url as string) ?? null,
+            id: landlord.id,
+            email: landlord.email ?? null,
+            username: landlord.username ?? null,
+            first_name: landlord.first_name ?? null,
+            last_name: landlord.last_name ?? null,
+            profile_picture_url: landlord.profile_picture_url ?? null,
           });
         }
       } finally {

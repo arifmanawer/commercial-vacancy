@@ -51,14 +51,16 @@ export default function ConversationPage() {
         | { success?: boolean; data?: typeof optimistic; error?: string }
         | null;
 
-      if (!res.ok || !json?.success || !json.data) {
+      const sentMessage = json?.data;
+
+      if (!res.ok || !json?.success || !sentMessage) {
         throw new Error(json?.error || "Failed to send message");
       }
 
       setMessages((prev) =>
         prev
           .filter((m) => !m.id.startsWith("temp-"))
-          .concat(json.data)
+          .concat(sentMessage)
       );
     } catch (_err) {
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")));

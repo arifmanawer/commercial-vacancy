@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../../components/Navbar";
@@ -9,6 +9,14 @@ import { supabase } from "../../lib/supabaseClient";
 import { logAuthEvent } from "../../lib/authLogger";
 
 export default function SignInPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <SignInInner />
+    </Suspense>
+  );
+}
+
+function SignInInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";

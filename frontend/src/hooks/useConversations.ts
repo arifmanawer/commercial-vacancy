@@ -34,6 +34,7 @@ export function useConversations() {
     }
 
     async function load() {
+      if (!user) return;
       setLoading(true);
       setError(null);
       try {

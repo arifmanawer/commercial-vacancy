@@ -507,7 +507,11 @@ router.post<
  */
 router.get<
   { id: string },
-  ApiResponse<{ conversation: ConversationSummary; messages: MessageApiModel[] }> | ApiResponse
+  ApiResponse<{
+    conversation: ConversationSummary;
+    messages: MessageApiModel[];
+    latestOffer?: any;
+  }> | ApiResponse
 >(
   '/conversations/:id',
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
@@ -660,12 +664,26 @@ router.get<
         created_at: m.created_at,
       }));
 
+    const { data: offersForConversation } = await supabaseAdmin
+      .from('offers')
+      .select(
+        'id, conversation_id, listing_id, landlord_id, renter_id, rate_type, rate_amount, currency, start_date, duration, subtotal_amount, platform_fee_amount, total_amount, status, created_at'
+      )
+      .eq('conversation_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const latestOffer = offersForConversation && offersForConversation.length > 0
+      ? offersForConversation[0]
+      : null;
+
     logMessagesApi('GET', '/api/messages/conversations/:id', userId, true);
     res.json({
       success: true,
       data: {
         conversation: summary,
         messages: apiMessages,
+        latestOffer,
       },
     });
   })

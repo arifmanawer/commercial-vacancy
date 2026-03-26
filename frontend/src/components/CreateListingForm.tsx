@@ -1,10 +1,12 @@
 
 "use client";
 import { useState } from "react";
+import {
+  LISTING_RATE_TYPES,
+  validateBuyNowListingPricing,
+} from "@/lib/listingPricing";
 
-// Property type and rental_type enums from schema
 const PROPERTY_TYPES = ["Apartment", "House", "Commercial", "Office", "Studio"];
-const RENTAL_TYPES = ["Daily", "Weekly", "Monthly", "Yearly"];
 
 export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) => Promise<void> | void }) {
   const [form, setForm] = useState({
@@ -17,10 +19,13 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
     zip_code: "",
     price: "",
     security_deposit: "",
-    rental_type: RENTAL_TYPES[0],
+    rental_type: LISTING_RATE_TYPES[1],
+    min_duration: "",
+    max_duration: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
 
   function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const list = e.target.files;
@@ -34,9 +39,36 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
+    const rateType = String(form.rental_type || "").toLowerCase();
+    const rateAmount =
+      form.price === "" ? null : Number.parseFloat(String(form.price));
+    const minDuration =
+      form.min_duration === ""
+        ? null
+        : Number.parseInt(String(form.min_duration), 10);
+    const maxDuration =
+      form.max_duration === ""
+        ? null
+        : Number.parseInt(String(form.max_duration), 10);
+
+    const pricingError = validateBuyNowListingPricing({
+      rateType,
+      rateAmount,
+      minDuration,
+      maxDuration,
+    });
+    if (pricingError) {
+      setFormError(pricingError);
+      return;
+    }
+
     setSubmitting(true);
-    await onSubmit({ ...form, photos: files });
-    setSubmitting(false);
+    try {
+      await onSubmit({ ...form, photos: files });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -151,34 +183,67 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
             placeholder="Zip Code"
           />
         </div>
+        <div />
+      </div>
+
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Pricing &amp; bookings (required for Buy Now)
+        </h3>
+        <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+          Renters pay through Stripe using these values. All fields below are required
+          so every listing supports instant checkout.
+        </p>
+      </div>
+
+      {formError && (
+        <div
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          role="alert"
+        >
+          {formError}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-slate-700 font-semibold mb-1">Rental Type</label>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Rate type <span className="text-red-600">*</span>
+          </label>
           <select
             name="rental_type"
             value={form.rental_type}
             onChange={handleChange}
+            required
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
           >
-            {RENTAL_TYPES.map((type) => (
-              <option key={type} value={type}>{type}</option>
+            {LISTING_RATE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
             ))}
           </select>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-slate-700 font-semibold mb-1">Price</label>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Price per {form.rental_type ?? "unit"} (USD){" "}
+            <span className="text-red-600">*</span>
+          </label>
           <input
             name="price"
             type="number"
             value={form.price}
             onChange={handleChange}
             required
+            min={0.01}
+            step={0.01}
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
-            placeholder="e.g. 1000"
+            placeholder="e.g. 100"
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-slate-700 font-semibold mb-1">Security Deposit</label>
           <input
@@ -189,6 +254,47 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
             placeholder="e.g. 500"
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Minimum duration <span className="text-red-600">*</span>
+          </label>
+          <input
+            name="min_duration"
+            type="number"
+            value={form.min_duration}
+            onChange={handleChange}
+            required
+            min={1}
+            step={1}
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
+            placeholder="e.g. 1"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Minimum number of {form.rental_type || "time units"} per booking.
+          </p>
+        </div>
+        <div>
+          <label className="block text-slate-700 font-semibold mb-1">
+            Maximum duration <span className="text-red-600">*</span>
+          </label>
+          <input
+            name="max_duration"
+            type="number"
+            value={form.max_duration}
+            onChange={handleChange}
+            required
+            min={1}
+            step={1}
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
+            placeholder="e.g. 30"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Maximum number of {form.rental_type || "time units"} per booking.
+          </p>
         </div>
       </div>
 

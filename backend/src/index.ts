@@ -6,6 +6,7 @@ import { config } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import apiRoutes from './routes';
+import { stripeWebhookHandler } from './routes/stripeWebhook';
 
 const app = express();
 
@@ -27,7 +28,11 @@ app.use(
   })
 );
 
-// Request parsing
+// Stripe webhooks need the raw body for signature verification.
+// This route MUST be registered before JSON body parsing middleware.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
+// Request parsing for all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

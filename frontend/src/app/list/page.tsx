@@ -8,6 +8,7 @@ import CreateListingForm from "@/components/CreateListingForm";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { validateBuyNowListingPricing } from "@/lib/listingPricing";
 
 type ListingFormInput = {
   title: string;
@@ -20,6 +21,8 @@ type ListingFormInput = {
   price: string | number;
   security_deposit?: string | number;
   rental_type: string;
+   min_duration: string | number;
+   max_duration: string | number;
   photos?: File[];
 };
 
@@ -36,6 +39,31 @@ export default function ListPage() {
 
     setSubmitting(true);
     try {
+      const rateType = String(data.rental_type || "").toLowerCase();
+      const rateAmount =
+        data.price === "" || data.price == null
+          ? null
+          : Number.parseFloat(String(data.price));
+      const minDuration =
+        data.min_duration === "" || data.min_duration == null
+          ? null
+          : Number.parseInt(String(data.min_duration), 10);
+      const maxDuration =
+        data.max_duration === "" || data.max_duration == null
+          ? null
+          : Number.parseInt(String(data.max_duration), 10);
+
+      const pricingError = validateBuyNowListingPricing({
+        rateType,
+        rateAmount,
+        minDuration,
+        maxDuration,
+      });
+      if (pricingError) {
+        alert(pricingError);
+        return;
+      }
+
       // Insert listing row
       const { data: listingData, error: listingError } = await supabase
         .from("listings")
@@ -49,6 +77,10 @@ export default function ListPage() {
               city: data.city,
               state: data.state,
               zip_code: data.zip_code,
+              rate_type: rateType,
+              rate_amount: rateAmount,
+              min_duration: minDuration,
+              max_duration: maxDuration,
             },
           ])
         .select()
@@ -147,7 +179,10 @@ export default function ListPage() {
             <li>Property address and basic details</li>
             <li>Photos of the space</li>
             <li>Description and amenities</li>
-            <li>Availability and pricing</li>
+            <li>
+              Rate type, price, and min/max duration (required for instant Buy Now
+              checkout)
+            </li>
           </ul>
         </section>
 

@@ -14,9 +14,8 @@ type ListingView = {
   city?: string | null;
   state?: string | null;
   property_type?: string | null;
-  price?: number | null;
-  security_deposit?: number | null;
-  rental_type?: string | null;
+  rate_amount?: number | null;
+  rate_type?: string | null;
   image?: string | null;
 };
 
@@ -27,16 +26,15 @@ type SavedListingRow = {
 type ListingRow = {
   id: string;
   title: string;
-  city: string | null;
-  state: string | null;
-  property_type: string | null;
+  description: string | null;
 };
 
 type PricingRow = {
-  property_id: string;
-  price: number | null;
-  rental_type: string | null;
-  security_deposit: number | null;
+  id: string;
+  rate_amount: number | null;
+  rate_type: string | null;
+  min_duration: number | null;
+  max_duration: number | null;
 };
 
 type ImageRow = {
@@ -124,10 +122,77 @@ export default function BrowsePage() {
     async function loadListings() {
       setLoadingListings(true);
       try {
-        const { data: listingRows } = await supabase
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8ebdf7',
+          },
+          body: JSON.stringify({
+            sessionId: '8ebdf7',
+            runId: 'pre-fix-1',
+            hypothesisId: 'H1',
+            location: 'frontend/src/app/browse/page.tsx:loadListings:entry',
+            message: 'Entering loadListings',
+            data: {},
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
+
+        const { data: listingRows, error: listingsError } = await supabase
           .from("listings")
-          .select("id, title, city, state, property_type")
+          .select(
+            // Only select columns that are guaranteed to exist in the current schema.
+            "id, title, description",
+          )
           .order("created_at", { ascending: false });
+
+        if (listingsError) {
+          console.error("Failed to load listings", listingsError);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Debug-Session-Id': '8ebdf7',
+            },
+            body: JSON.stringify({
+              sessionId: '8ebdf7',
+              runId: 'pre-fix-1',
+              hypothesisId: 'H1',
+              location: 'frontend/src/app/browse/page.tsx:loadListings:error',
+              message: 'Listings query failed',
+              data: { message: listingsError.message, details: listingsError.details },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion agent log
+          if (mounted) {
+            setListings([]);
+          }
+          return;
+        }
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8ebdf7',
+          },
+          body: JSON.stringify({
+            sessionId: '8ebdf7',
+            runId: 'pre-fix-1',
+            hypothesisId: 'H2',
+            location: 'frontend/src/app/browse/page.tsx:loadListings:afterQuery',
+            message: 'Listings query succeeded',
+            data: { rowCount: listingRows ? listingRows.length : null },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
 
         if (!listingRows || listingRows.length === 0) {
           setListings([]);
@@ -137,11 +202,6 @@ export default function BrowsePage() {
         const rows = listingRows as ListingRow[];
 
         const ids = rows.map((r) => r.id);
-        const { data: priceRows } = await supabase
-          .from("property_pricing")
-          .select("property_id, price, rental_type, security_deposit")
-          .in("property_id", ids)
-          .order("id", { ascending: true });
 
         const { data: imgRows } = await supabase
           .from("listings_images")
@@ -149,24 +209,19 @@ export default function BrowsePage() {
           .in("property_id", ids)
           .order("id", { ascending: true });
 
-        const priceMap = new Map<string, any>();
-        const priceRowsTyped = (priceRows ?? []) as PricingRow[];
-        priceRowsTyped.forEach((p) => priceMap.set(p.property_id, p));
         const imgMap = new Map<string, any>();
         const imgRowsTyped = (imgRows ?? []) as ImageRow[];
         imgRowsTyped.forEach((r) => imgMap.set(r.property_id, r));
 
         const view = rows.map((r) => {
-          const pricing = priceMap.get(r.id);
           return {
             id: r.id,
             title: r.title,
-            city: r.city,
-            state: r.state,
-            property_type: r.property_type,
-            price: pricing ? pricing.price : null,
-            security_deposit: pricing ? pricing.security_deposit : null,
-            rental_type: pricing ? pricing.rental_type : null,
+            city: null,
+            state: null,
+            property_type: null,
+            rate_amount: null,
+            rate_type: null,
             image: imgMap.get(r.id)?.image_url?.[0] ?? null,
           };
         });
@@ -174,6 +229,24 @@ export default function BrowsePage() {
         if (mounted) setListings(view);
       } catch (err) {
         console.error(err);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Debug-Session-Id': '8ebdf7',
+          },
+          body: JSON.stringify({
+            sessionId: '8ebdf7',
+            runId: 'pre-fix-1',
+            hypothesisId: 'H3',
+            location: 'frontend/src/app/browse/page.tsx:loadListings:catch',
+            message: 'Unexpected error in loadListings',
+            data: { errorMessage: err instanceof Error ? err.message : String(err) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
       } finally {
         setLoadingListings(false);
       }
@@ -226,8 +299,7 @@ export default function BrowsePage() {
       return false;
     }
 
-    const price = listing.price ?? null;
-    const deposit = listing.security_deposit ?? null;
+    const price = listing.rate_amount ?? null;
 
     if (filters.minPrice) {
       const min = Number(filters.minPrice);
@@ -240,20 +312,6 @@ export default function BrowsePage() {
       const max = Number(filters.maxPrice);
       if (Number.isFinite(max)) {
         if (price === null || price > max) return false;
-      }
-    }
-
-    if (filters.minDeposit) {
-      const min = Number(filters.minDeposit);
-      if (Number.isFinite(min)) {
-        if (deposit === null || deposit < min) return false;
-      }
-    }
-
-    if (filters.maxDeposit) {
-      const max = Number(filters.maxDeposit);
-      if (Number.isFinite(max)) {
-        if (deposit === null || deposit > max) return false;
       }
     }
 
@@ -430,8 +488,8 @@ export default function BrowsePage() {
                       {listing.property_type ?? ""}
                     </p>
                     <p className="mt-1 text-sm font-medium text-slate-900">
-                      {listing.price != null && listing.rental_type
-                        ? `${listing.price}/${listing.rental_type}`
+                      {listing.rate_amount != null && listing.rate_type
+                        ? `$${listing.rate_amount}/${listing.rate_type}`
                         : ""}
                     </p>
 

@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import type Stripe from 'stripe';
 import { requireStripe } from '../lib/stripe';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { generateAndSendAgreementForBooking } from '../lib/agreementService';
 
 type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
 
@@ -189,18 +188,55 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           break;
         }
 
-        if (!booking) {
+        let bookingToUse = booking;
+
+        // buy-now flow can create checkout sessions where `payment_intent_id`
+        // is not available immediately. In that case we reconcile using
+        // `payment_intent.metadata.booking_id`.
+        if (!bookingToUse) {
+          const bookingIdFromMetadata =
+            paymentIntent.metadata?.booking_id ??
+            (paymentIntent.metadata as any)?.bookingId ??
+            null;
+
+          if (bookingIdFromMetadata && typeof bookingIdFromMetadata === 'string') {
+            const { data: bookingById, error: bookingByIdError } = await supabaseAdmin
+              .from<BookingRow>('bookings')
+              .select('id, offer_id, status, payment_intent_id')
+              .eq('id', bookingIdFromMetadata)
+              .maybeSingle();
+
+            if (bookingByIdError) {
+              logStripeWebhook('Failed to load booking by metadata booking_id', {
+                paymentIntentId,
+                bookingId: bookingIdFromMetadata,
+                error: bookingByIdError.message,
+              });
+              break;
+            }
+
+            bookingToUse = bookingById ?? null;
+          }
+        }
+
+        if (!bookingToUse) {
           logStripeWebhook('No booking found for PaymentIntent', { paymentIntentId });
           break;
         }
 
-        if (booking.status === 'pending_payment') {
-          await markBookingReservedAndOfferAccepted(booking);
-          await generateAndSendAgreementForBooking(booking.id);
+        if (bookingToUse.status === 'pending_payment') {
+          if (!bookingToUse.payment_intent_id) {
+            await supabaseAdmin
+              .from<BookingRow>('bookings')
+              .update({ payment_intent_id: paymentIntentId } as Partial<BookingRow>)
+              .eq('id', bookingToUse.id);
+          }
+
+          await markBookingReservedAndOfferAccepted(bookingToUse);
         } else {
           logStripeWebhook('Booking already processed, skipping reserved update', {
-            bookingId: booking.id,
-            status: booking.status,
+            bookingId: bookingToUse.id,
+            status: bookingToUse.status,
           });
         }
         break;

@@ -12,6 +12,9 @@ services:
       - PORT=5001
       - NODE_ENV=development
       - FRONTEND_URL=http://localhost:3000
+      # Stripe Connect account links need these in the backend process env (must match frontend origin)
+      - STRIPE_CONNECT_REFRESH_URL=${STRIPE_CONNECT_REFRESH_URL:-http://localhost:3000/profile?stripe=refresh}
+      - STRIPE_CONNECT_RETURN_URL=${STRIPE_CONNECT_RETURN_URL:-http://localhost:3000/profile?stripe=return}
     volumes:
       - ./backend:/app
       # Keep container-managed node_modules (bind-mounting host node_modules can
@@ -32,7 +35,11 @@ services:
       - PORT=3000
       - NEXT_PUBLIC_API_URL=http://localhost:5001
     volumes:
-      - ./frontend:/app
+      # Avoid bind-mounting the entire app directory into /app.
+      # Some Docker Desktop filesystem setups can cause sporadic read failures
+      # for Next.js config files at startup.
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
       - /app/node_modules
       - /app/.next
     depends_on:

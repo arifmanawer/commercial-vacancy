@@ -61,7 +61,9 @@ export default function ListingPage() {
   const [tourOpen, setTourOpen] = useState(false);
   const [tourMessage, setTourMessage] = useState("");
   const [tourTime, setTourTime] = useState("");
-  const [submitting, setSubmitting] = useState<"tour" | null>(null);
+  const [buyStart, setBuyStart] = useState("");
+  const [buyDuration, setBuyDuration] = useState("");
+  const [submitting, setSubmitting] = useState<"tour" | "buy" | null>(null);
   const [startingConversation, setStartingConversation] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -313,13 +315,62 @@ export default function ListingPage() {
     });
   }, [mapsLoaded, listing]);
 
-  function ensureAuthenticated(action: "tour" | "message") {
+  function ensureAuthenticated(action: "tour" | "message" | "buy") {
     if (!user) {
       const target = `/signin?redirect=/listings/${id}&action=${action}`;
       router.push(target);
       return false;
     }
     return true;
+  }
+
+  async function buyNow() {
+    if (!listing || !id) return;
+    if (!ensureAuthenticated("buy") || !user) return;
+
+    const duration = Number(buyDuration);
+    if (!buyStart) {
+      setError("Please choose a start date and time.");
+      return;
+    }
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setError("Please enter a valid duration.");
+      return;
+    }
+
+    setSubmitting("buy");
+    setError(null);
+    setFeedback(null);
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/bookings/buy-now`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify({
+          listingId: listing.id,
+          startDate: buyStart,
+          duration,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: { checkoutUrl?: string }; error?: string }
+        | null;
+
+      if (!res.ok || !json?.success || !json.data?.checkoutUrl) {
+        setError(json?.error || "Unable to start checkout.");
+        return;
+      }
+
+      window.location.href = json.data.checkoutUrl;
+    } catch {
+      setError("Unable to start checkout.");
+    } finally {
+      setSubmitting(null);
+    }
   }
 
   async function submitInquiry() {
@@ -716,13 +767,52 @@ export default function ListingPage() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+                    <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">
+                      Buy now
+                    </p>
+                    <div className="space-y-2">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Start date &amp; time
+                        <input
+                          type="datetime-local"
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                          value={buyStart}
+                          onChange={(e) => setBuyStart(e.target.value)}
+                        />
+                      </label>
+                      <label className="block text-xs font-medium text-slate-600">
+                        Duration ({listing.rate_type ?? "units"})
+                        <input
+                          type="number"
+                          min={listing.min_duration ?? 1}
+                          max={listing.max_duration ?? undefined}
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                          value={buyDuration}
+                          onChange={(e) => setBuyDuration(e.target.value)}
+                          placeholder={
+                            listing.min_duration != null && listing.max_duration != null
+                              ? `${listing.min_duration}-${listing.max_duration}`
+                              : "Enter duration"
+                          }
+                        />
+                      </label>
+                    </div>
+                    <button
+                      className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
+                      onClick={buyNow}
+                      disabled={submitting != null}
+                    >
+                      {submitting === "buy" ? "Redirecting to checkout..." : "Buy Now"}
+                    </button>
+                  </div>
                   <button
                     className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
                     onClick={() => {
                       startMessageThread();
                     }}
                     disabled={
-                      submitting === "tour" ||
+                      submitting != null ||
                       startingConversation ||
                       !listing.landlord_user_id
                     }
@@ -737,7 +827,7 @@ export default function ListingPage() {
                       if (!ensureAuthenticated("tour")) return;
                       setTourOpen((open) => !open);
                     }}
-                    disabled={submitting === "tour"}
+                    disabled={submitting != null}
                   >
                     Schedule a Tour
                   </button>

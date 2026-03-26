@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
 
 // Initialize lazily so the backend can boot even if Stripe is not configured yet.
 export const stripe = stripeSecretKey

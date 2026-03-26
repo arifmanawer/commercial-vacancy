@@ -12,7 +12,7 @@ function isAuthPath(pathname: string) {
   return authPaths.some((p) => pathname === p);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

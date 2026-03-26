@@ -53,7 +53,7 @@ export default function AuthNav() {
       "Account";
     const initials = fullName
       .split(/\s+/)
-      .map((s) => s[0])
+      .map((s: string) => s[0])
       .join("")
       .slice(0, 2)
       .toUpperCase() || "?";

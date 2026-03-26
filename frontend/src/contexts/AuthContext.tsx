@@ -14,6 +14,7 @@ type AuthState = {
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfileLocally: (updates: Partial<Profile>) => void;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -44,6 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const p = await fetchProfile(user.id);
     setProfile(p);
   }, [user?.id]);
+
+  const updateProfileLocally = useCallback((updates: Partial<Profile>) => {
+    setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signOut,
         refreshProfile,
+        updateProfileLocally,
       }}
     >
       {children}

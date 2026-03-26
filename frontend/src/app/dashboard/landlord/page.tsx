@@ -218,7 +218,9 @@ export default function LandlordDashboardPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Contractor jobs
               </p>
-              <p className="text-2xl font-bold text-slate-900">$0.00</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {contractorJobs.length}
+              </p>
               <p className="text-xs text-slate-500">
                 Track requests, accepted work, and completed jobs.
               </p>

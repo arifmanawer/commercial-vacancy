@@ -72,14 +72,16 @@ export default function ConversationPage() {
         | { success?: boolean; data?: typeof optimistic; error?: string }
         | null;
 
-      if (!res.ok || !json?.success || !json.data) {
+      const sentMessage = json?.data;
+
+      if (!res.ok || !json?.success || !sentMessage) {
         throw new Error(json?.error || "Failed to send message");
       }
 
       setMessages((prev) =>
         prev
           .filter((m) => !m.id.startsWith("temp-"))
-          .concat(json.data)
+          .concat(sentMessage)
       );
     } catch (_err) {
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")));
@@ -185,29 +187,47 @@ export default function ConversationPage() {
         {conversation && (
           <div className="mt-2 bg-slate-50/80 border border-slate-200 rounded-2xl flex flex-col h-[70vh] overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h1 className="text-base font-semibold text-slate-900">
-                  {conversation.context_type === "listing"
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold text-slate-900 truncate">
+                  {conversation.context_listing_title
+                    ? conversation.context_listing_title
+                    : conversation.context_type === "listing"
                     ? "Listing conversation"
                     : conversation.context_type === "contractor"
                     ? "Contractor conversation"
                     : "Conversation"}
                 </h1>
-                <p className="text-xs text-slate-500">
+                {conversation.context_listing_address && (
+                  <p className="text-xs text-slate-400 truncate">
+                    {conversation.context_listing_address}
+                  </p>
+                )}
+                <p className="text-xs text-slate-500 mt-0.5">
                   Your messages stay on the platform. Share contact details only if you&apos;re comfortable.
                 </p>
               </div>
-              {conversation.context_type === "listing" && isLandlordInConversation && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreatingOffer((prev) => !prev);
-                  }}
-                  className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  {creatingOffer ? "Close offer" : "Create Offer"}
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {conversation.context_type === "listing" && isLandlordInConversation && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreatingOffer((prev) => !prev);
+                    }}
+                    className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    {creatingOffer ? "Close offer" : "Create Offer"}
+                  </button>
+                )}
+
+                {conversation.context_listing_id && (
+                  <Link
+                    href={`/listings/${conversation.context_listing_id}`}
+                    className="shrink-0 text-xs font-medium text-[var(--brand)] hover:underline"
+                  >
+                    View listing
+                  </Link>
+                )}
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

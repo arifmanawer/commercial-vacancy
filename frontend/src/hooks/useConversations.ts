@@ -9,6 +9,8 @@ export interface ConversationSummary {
   context_type: ConversationContextType;
   context_listing_id: string | null;
   context_contractor_id: string | null;
+  context_listing_title: string | null;
+  context_listing_address: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
   participants: {
@@ -32,6 +34,7 @@ export function useConversations() {
     }
 
     async function load() {
+      if (!user) return;
       setLoading(true);
       setError(null);
       try {

@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { useConversations } from "@/hooks/useConversations";
 
 type SavedListing = {
   id: string;
@@ -21,6 +22,7 @@ type SavedListing = {
 export default function RenterDashboardPage() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const { conversations, loading: loadingConversations } = useConversations();
   const [savedListings, setSavedListings] = useState<SavedListing[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -278,7 +280,7 @@ export default function RenterDashboardPage() {
                 Messages
               </p>
               <p className="text-2xl font-bold text-slate-900">
-                {inquiries.length}
+                {loadingConversations ? "…" : conversations.length}
               </p>
               <p className="text-xs text-slate-500">
                 Conversations with hosts will show up here.
@@ -532,10 +534,46 @@ export default function RenterDashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              No messages yet. When you send inquiries to hosts, your
-              conversations will show up here.
-            </div>
+            {loadingConversations ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Loading conversations…
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                No messages yet. When you send inquiries to hosts, your
+                conversations will show up here.
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {conversations.slice(0, 5).map((conv) => {
+                  const title = conv.context_listing_title
+                    ? conv.context_listing_title
+                    : conv.context_type === "contractor"
+                    ? "Contractor conversation"
+                    : "Conversation";
+                  return (
+                    <li key={conv.id}>
+                      <Link
+                        href={`/messages/${conv.id}`}
+                        className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50 rounded-md px-2 -mx-2 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{title}</p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {conv.last_message_preview || "No messages yet"}
+                          </p>
+                        </div>
+                        {conv.unread_count > 0 && (
+                          <span className="inline-flex items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-semibold min-w-[1.1rem] h-4 px-1 shrink-0">
+                            {conv.unread_count}
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         </section>
       </main>

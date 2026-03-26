@@ -47,7 +47,7 @@ export default function DashboardProfile() {
             <span className="text-slate-500 text-lg font-semibold">
               {name
                 .split(" ")
-                .map((n) => n[0])
+                .map((n: string) => n[0])
                 .join("")
                 .slice(0, 2)
                 .toUpperCase()}

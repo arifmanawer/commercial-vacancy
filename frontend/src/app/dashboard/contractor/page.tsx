@@ -101,7 +101,7 @@ export default function ContractorDashboardPage() {
           throw new Error(message);
         }
 
-        if (body?.data) {
+        if (body && "data" in body && body.data) {
           setExisting(body.data);
           setBusinessName(body.data.business_name);
           setSelectedServices(

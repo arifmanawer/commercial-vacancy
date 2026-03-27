@@ -12,6 +12,8 @@ import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
 import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 import VacancyInsights from "@/components/VacancyInsights";
+import ZoningInsights from "@/components/ZoningInsights";
+import TransitInsights from "@/components/TransitInsights";
 
 type LandlordPublicInfo = {
   id: string;
@@ -583,9 +585,15 @@ export default function ListingPage() {
               </div>
             </section>
 
-            {/* NYC Open Data Vacancy Insights */}
+            {/* NYC Open Data Insights */}
             {listing.zip_code && (
-              <VacancyInsights zipCode={listing.zip_code} />
+              <>
+                <VacancyInsights zipCode={listing.zip_code} />
+                <ZoningInsights zipCode={listing.zip_code} />
+              </>
+            )}
+            {mapCenter && (
+              <TransitInsights lat={mapCenter.lat} lng={mapCenter.lng} />
             )}
           </div>
 

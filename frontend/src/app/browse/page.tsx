@@ -11,6 +11,7 @@ import { SaveListingButton } from "@/components/SaveListingButton";
 type ListingView = {
   id: string;
   title: string;
+  address?: string | null;
   city?: string | null;
   state?: string | null;
   property_type?: string | null;
@@ -27,6 +28,7 @@ type SavedListingRow = {
 type ListingRow = {
   id: string;
   title: string;
+  address: string | null;
   city: string | null;
   state: string | null;
   property_type: string | null;
@@ -62,6 +64,7 @@ export default function BrowsePage() {
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<ListingView[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
+  const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({
     propertyType: "",
     city: "",
@@ -126,7 +129,7 @@ export default function BrowsePage() {
       try {
         const { data: listingRows } = await supabase
           .from("listings")
-          .select("id, title, city, state, property_type")
+          .select("id, title, address, city, state, property_type")
           .order("created_at", { ascending: false });
 
         if (!listingRows || listingRows.length === 0) {
@@ -161,6 +164,7 @@ export default function BrowsePage() {
           return {
             id: r.id,
             title: r.title,
+            address: r.address,
             city: r.city,
             state: r.state,
             property_type: r.property_type,
@@ -217,6 +221,15 @@ export default function BrowsePage() {
   );
 
   const filteredListings = listings.filter((listing) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = [listing.title, listing.address, listing.city, listing.property_type]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+
     if (filters.city && listing.city !== filters.city) return false;
     if (filters.state && listing.state !== filters.state) return false;
     if (
@@ -276,12 +289,29 @@ export default function BrowsePage() {
           Browse Spaces
         </h1>
         <p className="mt-3 text-slate-600 max-w-2xl leading-relaxed">
-          Search and filter available commercial spaces. Find venues by
-          location, type, and budget. Listings will appear here once property
-          management is wired up.
+          Search and filter available commercial spaces across NYC.
+          Find offices, retail, studios, and more by location, type, and budget.
         </p>
 
-        <section className="mt-10" aria-label="Filters">
+        <div className="mt-8 relative">
+          <input
+            type="text"
+            placeholder="Search by name, address, neighborhood, or type…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:border-[var(--brand)]/30"
+          />
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <section className="mt-6" aria-label="Filters">
           <h2 className="text-lg font-semibold text-slate-900 mb-3">
             Filter results
           </h2>

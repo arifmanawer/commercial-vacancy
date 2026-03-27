@@ -132,8 +132,8 @@ export default function ListPage() {
         </Link>
         <h1 className="text-3xl md:text-4xl font-bold text-slate-900">List Your Space</h1>
         <p className="mt-3 text-slate-600 leading-relaxed">
-          Landlords can add property listings here. The form will be connected
-          when the properties API is ready.
+          Add your commercial property to the platform. Provide details,
+          upload photos, and start receiving inquiries from interested renters.
         </p>
 
         <section className="mt-10" aria-labelledby="what-you-need-heading">

@@ -8,6 +8,7 @@ import CreateListingForm from "@/components/CreateListingForm";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useToast } from "@/components/Toast";
 
 type ListingFormInput = {
   title: string;
@@ -27,6 +28,7 @@ export default function ListPage() {
   const { user, isLandlord, loading } = useAuth();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   async function handleCreateListing(data: ListingFormInput) {
     if (!user) {
@@ -108,7 +110,7 @@ export default function ListPage() {
         if (imgErr) console.warn("images insert error", imgErr.message);
       }
 
-      // Redirect to browse so listing is visible
+      toast("Listing created successfully!");
       router.push("/browse");
     } catch (err: any) {
       console.error(err);

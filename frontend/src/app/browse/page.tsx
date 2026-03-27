@@ -8,6 +8,31 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { SaveListingButton } from "@/components/SaveListingButton";
 
+function ListingImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
+  if (!src) {
+    return (
+      <div className="h-28 rounded-md mb-4 bg-slate-50 border border-slate-100 flex items-center justify-center text-xs text-slate-400">
+        No image
+      </div>
+    );
+  }
+  return (
+    <div className="h-28 rounded-md overflow-hidden mb-4 relative bg-slate-100">
+      {!loaded && (
+        <div className="absolute inset-0 animate-pulse bg-slate-100" />
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+        onLoad={() => setLoaded(true)}
+      />
+    </div>
+  );
+}
+
 type ListingView = {
   id: string;
   title: string;
@@ -417,9 +442,23 @@ export default function BrowsePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {loadingListings ? (
-              <div className="col-span-3 text-center text-slate-500">
-                Loading listings…
-              </div>
+              <>
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col border border-slate-200/80 rounded-2xl p-5 bg-white animate-pulse"
+                  >
+                    <div className="h-28 rounded-md bg-slate-100 mb-4" />
+                    <div className="h-4 w-3/4 rounded bg-slate-100 mb-2" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100 mb-2" />
+                    <div className="h-4 w-1/3 rounded bg-slate-100 mt-1" />
+                    <div className="mt-4 flex justify-between">
+                      <div className="h-8 w-8 rounded-full bg-slate-100" />
+                      <div className="h-4 w-16 rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </>
             ) : listings.length === 0 ? (
               <div className="col-span-3 text-center text-slate-500">
                 No listings yet.
@@ -437,20 +476,7 @@ export default function BrowsePage() {
                     key={listing.id}
                     className="flex flex-col border border-slate-200/80 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="h-28 rounded-md overflow-hidden mb-4 flex items-center justify-center text-xs text-slate-400">
-                      {listing.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={listing.image}
-                          alt={listing.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-50 border border-slate-100 flex items-center justify-center text-xs text-slate-400">
-                          No image
-                        </div>
-                      )}
-                    </div>
+                    <ListingImage src={listing.image} alt={listing.title} />
                     <h3 className="text-sm font-semibold text-slate-900">
                       {listing.title}
                     </h3>

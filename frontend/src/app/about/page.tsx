@@ -35,13 +35,6 @@ const teamMembers = [
   },
 ];
 
-const highlights = [
-  { stat: "15+", label: "NYC listings seeded" },
-  { stat: "3", label: "Open Data APIs" },
-  { stat: "5", label: "Team members" },
-  { stat: "3", label: "User roles" },
-];
-
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -73,22 +66,6 @@ export default function AboutPage() {
               contractors with maintenance jobs — so NYC buildings stay active
               and well maintained.
             </p>
-          </div>
-        </section>
-
-        {/* Stats strip */}
-        <section className="border-b border-slate-200/80 bg-slate-50/60">
-          <div className="max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-              {highlights.map((h) => (
-                <div key={h.label}>
-                  <p className="text-2xl sm:text-3xl font-bold text-slate-900">
-                    {h.stat}
-                  </p>
-                  <p className="text-sm text-slate-500 mt-1">{h.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 

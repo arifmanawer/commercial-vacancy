@@ -5,6 +5,29 @@ import { ApiResponse } from '../types';
 
 const router = Router();
 
+interface PublicListingSummary {
+  id: string;
+  title: string | null;
+  city: string | null;
+  state: string | null;
+  property_type: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+interface LandlordPublicProfileResponse {
+  id: string;
+  name: string;
+  email: string | null;
+  message_enabled: boolean;
+  current_listings: PublicListingSummary[];
+  reviews: {
+    implemented: boolean;
+    message: string;
+    items: unknown[];
+  };
+}
+
 function logProfileApi(method: string, path: string, userId?: string, success?: boolean, error?: string) {
   const msg = userId
     ? `[API] ${method} ${path} user_id=${userId} ${success ? 'OK' : `FAIL: ${error}`}`
@@ -18,6 +41,93 @@ function logProfileApi(method: string, path: string, userId?: string, success?: 
  * Returns the full profile for the current user, including common fields
  * shared across all roles.
  */
+router.get<
+  { landlordId: string },
+  ApiResponse<LandlordPublicProfileResponse> | ApiResponse
+>(
+  '/public/:landlordId',
+  asyncHandler(async (req: Request<{ landlordId: string }>, res: Response) => {
+    const { landlordId } = req.params;
+
+    if (!landlordId) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', undefined, false, 'Missing landlordId');
+      res.status(400).json({ success: false, error: 'Missing landlordId' });
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, is_landlord, username, first_name, last_name')
+      .eq('id', landlordId)
+      .maybeSingle();
+
+    if (profileError) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, profileError.message);
+      res.status(500).json({ success: false, error: 'Failed to load landlord profile' });
+      return;
+    }
+
+    if (!profile) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'Profile not found');
+      res.status(404).json({ success: false, error: 'Landlord profile not found' });
+      return;
+    }
+
+    if (!(profile as any).is_landlord) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'User is not a landlord');
+      res.status(404).json({ success: false, error: 'Landlord profile not found' });
+      return;
+    }
+
+    const { data: listings, error: listingsError } = await supabaseAdmin
+      .from('listings')
+      .select('id, title, city, state, property_type, status, created_at')
+      .eq('user_id', landlordId)
+      .eq('status', 'Available')
+      .order('created_at', { ascending: false });
+
+    if (listingsError) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, listingsError.message);
+      res.status(500).json({ success: false, error: 'Failed to load landlord listings' });
+      return;
+    }
+
+    const firstName = (profile as any).first_name?.trim?.() || '';
+    const lastName = (profile as any).last_name?.trim?.() || '';
+    const username = (profile as any).username?.trim?.() || '';
+    const displayName =
+      [firstName, lastName].filter(Boolean).join(' ').trim() ||
+      username ||
+      'Landlord';
+
+    const currentListings: PublicListingSummary[] = ((listings ?? []) as any[]).map((listing) => ({
+      id: listing.id ?? '',
+      title: listing.title ?? null,
+      city: listing.city ?? null,
+      state: listing.state ?? null,
+      property_type: listing.property_type ?? null,
+      status: listing.status ?? null,
+      created_at: listing.created_at ?? null,
+    }));
+
+    const payload: LandlordPublicProfileResponse = {
+      id: (profile as any).id,
+      name: displayName,
+      email: (profile as any).email ?? null,
+      message_enabled: true,
+      current_listings: currentListings,
+      reviews: {
+        implemented: false,
+        message: 'Reviews are coming soon.',
+        items: [],
+      },
+    };
+
+    logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, true);
+    res.json({ success: true, data: payload });
+  })
+);
+
 router.get<
   unknown,
   ApiResponse<{

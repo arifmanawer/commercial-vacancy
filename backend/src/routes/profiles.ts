@@ -19,6 +19,7 @@ interface LandlordPublicProfileResponse {
   id: string;
   name: string;
   email: string | null;
+  profile_picture_url: string | null;
   message_enabled: boolean;
   current_listings: PublicListingSummary[];
   reviews: {
@@ -57,7 +58,7 @@ router.get<
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, is_landlord, username, first_name, last_name')
+      .select('id, email, is_landlord, username, first_name, last_name, profile_picture_url')
       .eq('id', landlordId)
       .maybeSingle();
 
@@ -129,6 +130,7 @@ router.get<
       id: (profile as any).id,
       name: displayName,
       email: (profile as any).email ?? null,
+      profile_picture_url: (profile as any).profile_picture_url ?? null,
       message_enabled: true,
       current_listings: currentListings,
       reviews: {

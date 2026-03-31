@@ -21,6 +21,7 @@ type LandlordPublicProfile = {
   id: string;
   name: string;
   email: string | null;
+  profile_picture_url: string | null;
   message_enabled: boolean;
   current_listings: PublicListingSummary[];
   reviews: {
@@ -198,17 +199,41 @@ export default function LandlordPublicProfilePage() {
         </Link>
 
         <section className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Landlord
-          </p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">
-            {profile.name}
-          </h1>
-          {profile.email && (
-            <p className="mt-2 text-sm text-slate-600 break-all">
-              {profile.email}
-            </p>
-          )}
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+            <div className="mx-auto sm:mx-0 h-24 w-24 sm:h-28 sm:w-28 flex-shrink-0 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center ring-1 ring-slate-200/80">
+              {profile.profile_picture_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profile.profile_picture_url}
+                  alt={profile.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-lg font-semibold text-slate-600">
+                  {profile.name
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((p) => p[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "L"}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 text-center sm:text-left">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Landlord
+              </p>
+              <h1 className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">
+                {profile.name}
+              </h1>
+              {profile.email && (
+                <p className="mt-2 text-sm text-slate-600 break-all">
+                  {profile.email}
+                </p>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="mt-10" aria-labelledby="listings-heading">

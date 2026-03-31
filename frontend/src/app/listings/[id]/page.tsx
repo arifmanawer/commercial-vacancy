@@ -11,6 +11,9 @@ import { getApiUrl } from "@/lib/api";
 import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
 import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
+import VacancyInsights from "@/components/VacancyInsights";
+import ZoningInsights from "@/components/ZoningInsights";
+import TransitInsights from "@/components/TransitInsights";
 
 type LandlordPublicInfo = {
   id: string;
@@ -32,6 +35,7 @@ type ListingDetails = {
   price: number | null;
   rental_type: string | null;
   security_deposit: number | null;
+  zip_code: string | null;
   images: string[];
   landlord_user_id: string | null;
 };
@@ -91,7 +95,7 @@ export default function ListingPage() {
         const { data: listingRow, error: listingError } = await supabase
           .from("listings")
           .select(
-            "id, title, description, address, city, state, property_type, user_id",
+            "id, title, description, address, city, state, zip_code, property_type, user_id",
           )
           .eq("id", id)
           .maybeSingle();
@@ -142,6 +146,7 @@ export default function ListingPage() {
             city: listingRow.city ?? null,
             state: listingRow.state ?? null,
             property_type: listingRow.property_type ?? null,
+            zip_code: listingRow.zip_code ?? null,
             price: pricing?.price ?? null,
             rental_type: pricing?.rental_type ?? null,
             security_deposit: pricing?.security_deposit ?? null,
@@ -579,6 +584,17 @@ export default function ListingPage() {
                 )}
               </div>
             </section>
+
+            {/* NYC Open Data Insights */}
+            {listing.zip_code && (
+              <>
+                <VacancyInsights zipCode={listing.zip_code} />
+                <ZoningInsights zipCode={listing.zip_code} />
+              </>
+            )}
+            {mapCenter && (
+              <TransitInsights lat={mapCenter.lat} lng={mapCenter.lng} />
+            )}
           </div>
 
           {/* RIGHT COLUMN - Sticky Sidebar */}

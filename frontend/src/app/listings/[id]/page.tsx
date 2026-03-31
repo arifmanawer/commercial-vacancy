@@ -735,19 +735,30 @@ export default function ListingPage() {
                           </span>
                         )}
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex flex-col gap-0.5">
                         <p className="text-sm font-medium text-slate-900 group-hover:text-slate-950">
                           {landlordLoading ? "Loading…" : landlordDisplayName}
                         </p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {landlordLoading
-                            ? "Loading contact details…"
-                            : landlordError
-                              ? "Contact details unavailable"
-                              : landlordInfo?.email
-                                ? landlordInfo.email
-                                : "View public profile"}
-                        </p>
+                        {landlordLoading ? (
+                          <p className="text-xs text-slate-500">
+                            Loading contact details…
+                          </p>
+                        ) : landlordError ? (
+                          <p className="text-xs text-slate-500">
+                            Contact details unavailable
+                          </p>
+                        ) : (
+                          <>
+                            {landlordInfo?.email ? (
+                              <p className="text-xs text-slate-500 truncate">
+                                {landlordInfo.email}
+                              </p>
+                            ) : null}
+                            <p className="text-xs font-medium text-[var(--brand)]">
+                              View profile
+                            </p>
+                          </>
+                        )}
                       </div>
                     </Link>
                   ) : (

@@ -36,10 +36,10 @@ function logProfileApi(method: string, path: string, userId?: string, success?: 
 }
 
 /**
- * GET /api/profiles/me
+ * GET /api/profiles/public/:landlordId
  *
- * Returns the full profile for the current user, including common fields
- * shared across all roles.
+ * Public landlord profile for renters. Eligible if `is_landlord` is true or the
+ * user owns at least one listing (covers hosts who list without the role flag).
  */
 router.get<
   { landlordId: string },
@@ -73,8 +73,23 @@ router.get<
       return;
     }
 
-    if (!(profile as any).is_landlord) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'User is not a landlord');
+    const isLandlordRole = Boolean((profile as any).is_landlord);
+
+    const { count: listingCount, error: countError } = await supabaseAdmin
+      .from('listings')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', landlordId);
+
+    if (countError) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, countError.message);
+      res.status(500).json({ success: false, error: 'Failed to verify landlord listings' });
+      return;
+    }
+
+    const hasListings = (listingCount ?? 0) > 0;
+
+    if (!isLandlordRole && !hasListings) {
+      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'Not a landlord or host');
       res.status(404).json({ success: false, error: 'Landlord profile not found' });
       return;
     }
@@ -118,7 +133,7 @@ router.get<
       current_listings: currentListings,
       reviews: {
         implemented: false,
-        message: 'Reviews are coming soon.',
+        message: 'No reviews yet.',
         items: [],
       },
     };
@@ -128,6 +143,12 @@ router.get<
   })
 );
 
+/**
+ * GET /api/profiles/me
+ *
+ * Returns the full profile for the current user, including common fields
+ * shared across all roles.
+ */
 router.get<
   unknown,
   ApiResponse<{

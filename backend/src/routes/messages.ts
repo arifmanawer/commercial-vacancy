@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
@@ -91,7 +92,7 @@ async function fetchListingMap(listingIds: string[]): Promise<Map<string, Listin
   if (!unique.length) return map;
 
   const { data } = await supabaseAdmin
-    .from<ListingBasic>('listings')
+    .from('listings')
     .select('id, title, address, city, state')
     .in('id', unique);
 
@@ -116,7 +117,7 @@ function listingLabel(listing: ListingBasic | undefined): { title: string | null
  * Returns all conversations for the authenticated user with unread counts.
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ConversationSummary[]> | ApiResponse
 >(
   '/conversations',
@@ -133,7 +134,7 @@ router.get<
     }
 
     const { data: participantRows, error: participantsError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id, role, last_read_at')
       .eq('user_id', userId);
 
@@ -158,7 +159,7 @@ router.get<
     }
 
     const { data: conversationRows, error: conversationsError } = await supabaseAdmin
-      .from<ConversationRow>('conversations')
+      .from('conversations')
       .select(
         'id, created_at, created_by, context_type, context_listing_id, context_contractor_id, last_message_at, last_message_preview'
       )
@@ -178,7 +179,7 @@ router.get<
     }
 
     const { data: allParticipants, error: allParticipantsError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id, role, last_read_at')
       .in('conversation_id', conversationIds);
 
@@ -195,7 +196,7 @@ router.get<
     }
 
     const { data: latestMessages, error: latestMessagesError } = await supabaseAdmin
-      .from<MessageRow>('messages')
+      .from('messages')
       .select('conversation_id, created_at, sender_id')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false });
@@ -265,7 +266,7 @@ router.get<
  * Creates or returns an existing conversation for a given context and participant set.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ConversationSummary> | ApiResponse,
   {
     contextType: ConversationContextType;
@@ -309,8 +310,10 @@ router.post<
     const participantSet = Array.from(new Set(participantIds)).sort();
 
     let convQuery = supabaseAdmin
-      .from<ConversationRow>('conversations')
-      .select('id, created_at, created_by, context_type, context_listing_id, context_contractor_id')
+      .from('conversations')
+      .select(
+        'id, created_at, created_by, context_type, context_listing_id, context_contractor_id, last_message_at, last_message_preview'
+      )
       .eq('context_type', contextType);
 
     if (contextType === 'listing') {
@@ -342,7 +345,7 @@ router.post<
     if (convCandidates && convCandidates.length > 0) {
       const candidateIds = convCandidates.map((c) => c.id);
       const { data: candidateParticipants, error: candidateParticipantsError } = await supabaseAdmin
-        .from<ConversationParticipantRow>('conversation_participants')
+        .from('conversation_participants')
         .select('conversation_id, user_id')
         .in('conversation_id', candidateIds);
 
@@ -375,7 +378,7 @@ router.post<
 
     if (!conversation) {
       const { data: inserted, error: insertError } = await supabaseAdmin
-        .from<ConversationRow>('conversations')
+        .from('conversations')
         .insert({
           created_by: userId,
           context_type: contextType,
@@ -400,16 +403,17 @@ router.post<
       }
 
       conversation = inserted;
+      const conversationId = conversation.id;
 
       const participantRowsToInsert: Partial<ConversationParticipantRow>[] = participantSet.map(
         (pid) => ({
-          conversation_id: conversation!.id,
+          conversation_id: conversationId,
           user_id: pid,
         })
       );
 
       const { error: participantsInsertError } = await supabaseAdmin
-        .from<ConversationParticipantRow>('conversation_participants')
+        .from('conversation_participants')
         .insert(participantRowsToInsert);
 
       if (participantsInsertError) {
@@ -425,8 +429,13 @@ router.post<
       }
     }
 
+    if (!conversation) {
+      res.status(500).json({ success: false, error: 'Failed to find or create conversation' });
+      return;
+    }
+
     const { data: participants, error: participantsError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id, role, last_read_at')
       .eq('conversation_id', conversation.id);
 
@@ -443,7 +452,7 @@ router.post<
     }
 
     const { data: messages, error: messagesError } = await supabaseAdmin
-      .from<MessageRow>('messages')
+      .from('messages')
       .select('conversation_id, created_at, sender_id')
       .eq('conversation_id', conversation.id)
       .order('created_at', { ascending: false });
@@ -524,7 +533,7 @@ router.get<
     }
 
     const { data: participantRow, error: participantError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id, last_read_at, role')
       .eq('conversation_id', id)
       .eq('user_id', userId)
@@ -549,7 +558,7 @@ router.get<
     }
 
     const { data: conversation, error: conversationError } = await supabaseAdmin
-      .from<ConversationRow>('conversations')
+      .from('conversations')
       .select(
         'id, created_at, created_by, context_type, context_listing_id, context_contractor_id, last_message_at, last_message_preview'
       )
@@ -569,7 +578,7 @@ router.get<
     }
 
     const { data: participants, error: participantsError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id, role, last_read_at')
       .eq('conversation_id', id);
 
@@ -590,7 +599,7 @@ router.get<
     const before = req.query.before as string | undefined;
 
     let messagesQuery = supabaseAdmin
-      .from<MessageRow>('messages')
+      .from('messages')
       .select('id, conversation_id, sender_id, body, created_at')
       .eq('conversation_id', id)
       .order('created_at', { ascending: false })
@@ -708,7 +717,7 @@ router.post<
     }
 
     const { data: participantRow, error: participantError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id')
       .eq('conversation_id', id)
       .eq('user_id', userId)
@@ -741,7 +750,7 @@ router.post<
     const trimmed = body.trim();
 
     const { data: inserted, error: insertError } = await supabaseAdmin
-      .from<MessageRow>('messages')
+      .from('messages')
       .insert({
         conversation_id: id,
         sender_id: userId,
@@ -763,7 +772,7 @@ router.post<
     }
 
     const { error: updateConversationError } = await supabaseAdmin
-      .from<ConversationRow>('conversations')
+      .from('conversations')
       .update({
         last_message_at: inserted.created_at,
         last_message_preview: trimmed.slice(0, 280),
@@ -781,7 +790,7 @@ router.post<
     }
 
     const { error: updateReadError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .update({ last_read_at: inserted.created_at } as Partial<ConversationParticipantRow>)
       .eq('conversation_id', id)
       .eq('user_id', userId);
@@ -844,7 +853,7 @@ router.post<
     }
 
     const { data: participantRow, error: participantError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id')
       .eq('conversation_id', id)
       .eq('user_id', userId)
@@ -875,7 +884,7 @@ router.post<
     }
 
     const { error: updateError } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .update({ last_read_at: new Date().toISOString() } as Partial<ConversationParticipantRow>)
       .eq('conversation_id', id)
       .eq('user_id', userId);

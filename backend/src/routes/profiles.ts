@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
@@ -152,7 +153,7 @@ router.get<
  * shared across all roles.
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   ApiResponse<{
     id: string;
     email: string | null;
@@ -208,7 +209,7 @@ router.get<
  * All fields are optional; only provided fields are updated.
  */
 router.patch<
-  unknown,
+  ParamsDictionary,
   ApiResponse<{
     id: string;
     email: string | null;
@@ -293,7 +294,7 @@ router.patch<
  *   (or ?user_id= query param). It does not validate a JWT.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean }> | ApiResponse
 >(
   '/upgrade-landlord',
@@ -349,7 +350,7 @@ router.post<
  * Sets is_contractor=true on the user's profile.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean; is_contractor: boolean }> | ApiResponse
 >(
   '/upgrade-contractor',
@@ -405,7 +406,7 @@ router.post<
  * Update is_landlord and is_contractor from role checklist.
  */
 router.patch<
-  unknown,
+  ParamsDictionary,
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean; is_contractor: boolean }> | ApiResponse
 >(
   '/roles',

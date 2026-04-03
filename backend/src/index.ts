@@ -49,6 +49,7 @@ app.get('/', (_req, res) => {
     <li><a href="/health">Health check</a></li>
     <li><a href="/test">Test</a></li>
   </ul>
+  <p>end</p>
 </body>
 </html>`);
 });

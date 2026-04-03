@@ -41,6 +41,13 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Simple browser-friendly check (open https://your-host/test in a tab)
+app.get('/test', (_req, res) => {
+  res.type('text/plain').send(
+    `Commercial Vacancy API — test OK\n${new Date().toISOString()}\n`
+  );
+});
+
 // API routes
 app.use('/api', apiRoutes);
 

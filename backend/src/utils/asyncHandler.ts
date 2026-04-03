@@ -4,10 +4,10 @@ import { ParsedQs } from 'qs';
 
 type AsyncRequestHandler<
   P = ParamsDictionary,
-  ResBody = unknown,
-  ReqBody = unknown,
+  ResBody = any,
+  ReqBody = any,
   ReqQuery = ParsedQs,
-  Locals extends Record<string, unknown> = Record<string, unknown>,
+  Locals extends Record<string, any> = Record<string, any>,
 > = (
   req: Request<P, ResBody, ReqBody, ReqQuery, Locals>,
   res: Response<ResBody, Locals>,
@@ -16,10 +16,10 @@ type AsyncRequestHandler<
 
 export const asyncHandler = <
   P = ParamsDictionary,
-  ResBody = unknown,
-  ReqBody = unknown,
+  ResBody = any,
+  ReqBody = any,
   ReqQuery = ParsedQs,
-  Locals extends Record<string, unknown> = Record<string, unknown>,
+  Locals extends Record<string, any> = Record<string, any>,
 >(
   fn: AsyncRequestHandler<P, ResBody, ReqBody, ReqQuery, Locals>
 ): RequestHandler<P, ResBody, ReqBody, ReqQuery, Locals> => {

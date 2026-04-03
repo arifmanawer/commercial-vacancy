@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse, PaginatedResponse } from '../types';
@@ -62,7 +63,7 @@ function logContractorJobs(
  * Landlord creates a job request for a contractor.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ContractorJobApiModel> | ApiResponse,
   {
     contractor_id?: string;
@@ -129,7 +130,7 @@ router.post<
     }
 
     const { data, error } = await supabaseAdmin
-      .from<ContractorJobRow>('contractor_jobs')
+      .from('contractor_jobs')
       .insert(insertPayload)
       .select('*')
       .maybeSingle();
@@ -155,7 +156,7 @@ router.post<
  * - listing_id: filter landlord view to a specific listing
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   PaginatedResponse<ContractorJobApiModel> | ApiResponse
 >(
   '/',
@@ -176,7 +177,7 @@ router.get<
     const to = from + pageSize - 1;
 
     let query = supabaseAdmin
-      .from<ContractorJobRow>('contractor_jobs')
+      .from('contractor_jobs')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -268,7 +269,7 @@ router.patch<
     }
 
     const { data: existing, error: fetchError } = await supabaseAdmin
-      .from<ContractorJobRow>('contractor_jobs')
+      .from('contractor_jobs')
       .select('landlord_id, contractor_id')
       .eq('id', id)
       .maybeSingle();
@@ -288,7 +289,7 @@ router.patch<
     updates.updated_at = new Date().toISOString() as any;
 
     const { data, error } = await supabaseAdmin
-      .from<ContractorJobRow>('contractor_jobs')
+      .from('contractor_jobs')
       .update(updates)
       .eq('id', id)
       .select('*')

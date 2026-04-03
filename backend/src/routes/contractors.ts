@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse, PaginatedResponse } from '../types';
@@ -94,7 +95,7 @@ async function requireContractorRole(userId: string, res: Response): Promise<boo
  * Requires profiles.is_contractor = true.
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ContractorApiModel | undefined> | ApiResponse
 >(
   '/me',
@@ -116,7 +117,7 @@ router.get<
       data,
       error,
     } = await supabaseAdmin
-      .from<ContractorRow>('contractors')
+      .from('contractors')
       .select(
         'id, user_id, business_name, profile_picture_url, services, hourly_rate, service_radius, rating, total_jobs_completed, is_verified, availability_status, available_days'
       )
@@ -148,7 +149,7 @@ router.get<
  * Create or update the contractor profile for the authenticated user.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ContractorApiModel> | ApiResponse,
   {
     business_name?: string;
@@ -234,7 +235,7 @@ router.post<
       data,
       error,
     } = await supabaseAdmin
-      .from<ContractorRow>('contractors')
+      .from('contractors')
       .upsert(upsertPayload, {
         onConflict: 'user_id',
       })
@@ -271,7 +272,7 @@ router.post<
  * - Requires authenticated user with landlord role (profiles.is_landlord = true)
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   PaginatedResponse<ContractorApiModel> | ApiResponse
 >(
   '/',

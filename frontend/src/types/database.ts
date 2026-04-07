@@ -53,3 +53,14 @@ export type ContractorJob = {
   updated_at: string;
 };
 
+export type Review = {
+  id: string;
+  target_user_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  reviewer_avatar: string | null;
+  role_context: "landlord" | "contractor" | "renter";
+  rating: number;
+  content: string;
+  created_at: string;
+};

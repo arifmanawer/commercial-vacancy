@@ -40,7 +40,7 @@ export function useConversation(conversationId: string | null) {
           `${getApiUrl()}/api/messages/conversations/${conversationId}`,
           {
             headers: {
-              "X-User-Id": user.id,
+              "X-User-Id": user!.id,
             },
           }
         );

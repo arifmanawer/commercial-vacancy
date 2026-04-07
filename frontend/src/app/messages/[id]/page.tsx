@@ -55,11 +55,10 @@ export default function ConversationPage() {
         throw new Error(json?.error || "Failed to send message");
       }
 
-      setMessages((prev) =>
-        prev
-          .filter((m) => !m.id.startsWith("temp-"))
-          .concat(json.data)
-      );
+      setMessages((prev) => [
+        ...prev.filter((m) => !m.id.startsWith("temp-")),
+        json.data as any,
+      ]);
     } catch (_err) {
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")));
       alert("Failed to send message. Please try again.");

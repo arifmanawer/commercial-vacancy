@@ -194,13 +194,14 @@ export default function ListingPage() {
         }
 
         if (!cancelled) {
+          const dl = data as any;
           setLandlordInfo({
-            id: data.id as string,
-            email: (data.email as string) ?? null,
-            username: (data.username as string) ?? null,
-            first_name: (data.first_name as string) ?? null,
-            last_name: (data.last_name as string) ?? null,
-            profile_picture_url: (data.profile_picture_url as string) ?? null,
+            id: dl.id as string,
+            email: (dl.email as string) ?? null,
+            username: (dl.username as string) ?? null,
+            first_name: (dl.first_name as string) ?? null,
+            last_name: (dl.last_name as string) ?? null,
+            profile_picture_url: (dl.profile_picture_url as string) ?? null,
           });
         }
       } finally {
@@ -682,30 +683,60 @@ export default function ListingPage() {
                     Listed by
                   </p>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {landlordInfo?.profile_picture_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={landlordInfo.profile_picture_url}
-                          alt={landlordDisplayName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-600">
-                          {landlordDisplayName
-                            .split(" ")
-                            .map((p) => p[0])
-                            .join("")
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                    {listing.landlord_user_id ? (
+                      <Link href={`/user/${listing.landlord_user_id}`}  className="flex-shrink-0 block group">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center group-hover:ring-2 ring-slate-400 transition-all">
+                          {landlordInfo?.profile_picture_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={landlordInfo.profile_picture_url}
+                              alt={landlordDisplayName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-600">
+                              {landlordDisplayName
+                                .split(" ")
+                                .map((p) => p[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                        {landlordInfo?.profile_picture_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={landlordInfo.profile_picture_url}
+                            alt={landlordDisplayName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-600">
+                            {landlordDisplayName
+                              .split(" ")
+                              .map((p) => p[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {landlordLoading ? "Loading…" : landlordDisplayName}
-                      </p>
-                      <p className="text-xs text-slate-500">
+                      {listing.landlord_user_id ? (
+                        <Link href={`/user/${listing.landlord_user_id}`} className="text-sm font-medium text-slate-900 hover:text-slate-600 hover:underline transition-colors block">
+                          {landlordLoading ? "Loading…" : landlordDisplayName}
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-medium text-slate-900">
+                          {landlordLoading ? "Loading…" : landlordDisplayName}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-0.5">
                         {landlordLoading
                           ? "Loading contact details…"
                           : landlordError

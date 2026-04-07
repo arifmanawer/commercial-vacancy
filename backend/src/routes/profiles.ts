@@ -324,5 +324,58 @@ router.patch<
   })
 );
 
+/**
+ * GET /api/profiles/public/:userId
+ *
+ * Returns a public user profile, bypassing RLS using the admin client.
+ */
+router.get<
+  { userId: string },
+  ApiResponse<{
+    id: string;
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    profile_picture_url: string | null;
+    description: string | null;
+    created_at: string;
+    is_landlord: boolean;
+    is_contractor: boolean;
+  }> | ApiResponse
+>(
+  '/public/:userId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'Missing userId parameter' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select(
+        'id, username, first_name, last_name, profile_picture_url, description, created_at, is_landlord, is_contractor'
+      )
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      logProfileApi('GET', `/api/profiles/public/${userId}`, undefined, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to load public profile' });
+      return;
+    }
+
+    if (!data) {
+      logProfileApi('GET', `/api/profiles/public/${userId}`, undefined, false, 'Profile not found');
+      res.status(404).json({ success: false, error: 'Profile not found' });
+      return;
+    }
+
+    logProfileApi('GET', `/api/profiles/public/${userId}`, undefined, true);
+    res.json({ success: true, data: data as any });
+  })
+);
+
 export default router;
 

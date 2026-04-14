@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ProfileReviews from "@/components/ProfileReviews";
 import { getApiUrl } from "@/lib/api";
 
 type PublicListingSummary = {
@@ -17,24 +18,24 @@ type PublicListingSummary = {
   created_at: string | null;
 };
 
-type LandlordPublicProfile = {
+type PublicProfile = {
   id: string;
-  name: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
   profile_picture_url: string | null;
-  message_enabled: boolean;
-  current_listings: PublicListingSummary[];
-  reviews: {
-    implemented: boolean;
-    message: string;
-    items: unknown[];
-  };
+  description: string | null;
+  created_at: string;
+  is_landlord: boolean;
+  is_contractor: boolean;
 };
 
 export default function LandlordPublicProfilePage() {
   const params = useParams<{ id: string | string[] }>();
   const landlordId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
-  const [profile, setProfile] = useState<LandlordPublicProfile | null>(null);
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [listings, setListings] = useState<PublicListingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -53,42 +54,51 @@ export default function LandlordPublicProfilePage() {
       setLoadError(null);
       setNotFound(false);
       setProfile(null);
+      setListings([]);
 
       try {
-        const res = await fetch(
-          `${getApiUrl()}/api/profiles/public/${encodeURIComponent(landlordId)}`,
-        );
-
-        type ApiJson = {
-          success?: boolean;
-          data?: LandlordPublicProfile;
-          error?: string;
-        };
-        let json: ApiJson | null = null;
-        try {
-          json = (await res.json()) as ApiJson;
-        } catch {
-          json = null;
-        }
+        // Fetch profile and listings in parallel
+        const [profileRes, listingsRes] = await Promise.all([
+          fetch(`${getApiUrl()}/api/profiles/public/${encodeURIComponent(landlordId)}`),
+          fetch(`${getApiUrl()}/api/listings?user_id=${encodeURIComponent(landlordId)}`),
+        ]);
 
         if (cancelled) return;
 
-        if (res.status === 404) {
+        if (profileRes.status === 404) {
           setNotFound(true);
           return;
         }
 
-        if (!res.ok) {
-          setLoadError("Something went wrong. Please try again later.");
+        if (!profileRes.ok) {
+          setLoadError("Something went wrong loading this profile. Please try again later.");
           return;
         }
 
-        if (!json?.success || !json.data) {
-          setLoadError("Something went wrong. Please try again later.");
+        const profileJson = await profileRes.json();
+        if (!profileJson?.success || !profileJson.data) {
+          setLoadError("Something went wrong loading this profile. Please try again later.");
           return;
         }
 
-        setProfile(json.data);
+        const profileData = profileJson.data as PublicProfile;
+
+        // Require the user to actually be a landlord
+        if (!profileData.is_landlord) {
+          setNotFound(true);
+          return;
+        }
+
+        if (cancelled) return;
+        setProfile(profileData);
+
+        // Listings are best-effort — don't fail the whole page if they error
+        if (listingsRes.ok) {
+          const listingsJson = await listingsRes.json();
+          if (!cancelled && listingsJson?.success && Array.isArray(listingsJson.data)) {
+            setListings(listingsJson.data as PublicListingSummary[]);
+          }
+        }
       } catch {
         if (!cancelled) {
           setLoadError("Something went wrong. Please try again later.");
@@ -104,6 +114,7 @@ export default function LandlordPublicProfilePage() {
     };
   }, [landlordId]);
 
+  // ─── Loading skeleton ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -118,6 +129,7 @@ export default function LandlordPublicProfilePage() {
     );
   }
 
+  // ─── Not found ───────────────────────────────────────────────────────────────
   if (notFound) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -132,12 +144,8 @@ export default function LandlordPublicProfilePage() {
             ← Back to browse
           </Link>
           <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
-              Profile not found
-            </h1>
-            <p className="mt-2 text-slate-600">
-              We couldn&apos;t find this profile.
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900">Profile not found</h1>
+            <p className="mt-2 text-slate-600">We couldn&apos;t find this landlord profile.</p>
             <Link
               href="/browse"
               className="mt-6 inline-block text-sm font-medium text-[var(--brand)] hover:underline"
@@ -151,6 +159,7 @@ export default function LandlordPublicProfilePage() {
     );
   }
 
+  // ─── Error ───────────────────────────────────────────────────────────────────
   if (loadError || !profile || !landlordId) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -165,12 +174,8 @@ export default function LandlordPublicProfilePage() {
             ← Back to browse
           </Link>
           <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h1 className="text-2xl font-bold text-slate-900">
-              Something went wrong
-            </h1>
-            <p className="mt-2 text-slate-600">
-              {loadError || "Please try again later."}
-            </p>
+            <h1 className="text-2xl font-bold text-slate-900">Something went wrong</h1>
+            <p className="mt-2 text-slate-600">{loadError || "Please try again later."}</p>
             <Link
               href="/browse"
               className="mt-6 inline-block text-sm font-medium text-[var(--brand)] hover:underline"
@@ -184,11 +189,27 @@ export default function LandlordPublicProfilePage() {
     );
   }
 
+  // ─── Derived display values ──────────────────────────────────────────────────
+  const displayName =
+    [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
+    profile.username ||
+    "Landlord";
+
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "L";
+
+  // ─── Page ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/90 backdrop-blur-md">
         <Navbar />
       </header>
+
       <main className="max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
         <Link
           href="/browse"
@@ -197,6 +218,7 @@ export default function LandlordPublicProfilePage() {
           ← Back to browse
         </Link>
 
+        {/* Profile header */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
             <div className="mx-auto sm:mx-0 h-24 w-24 sm:h-28 sm:w-28 flex-shrink-0 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center ring-1 ring-slate-200/80">
@@ -204,32 +226,34 @@ export default function LandlordPublicProfilePage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={profile.profile_picture_url}
-                  alt={profile.name}
+                  alt={displayName}
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="text-lg font-semibold text-slate-600">
-                  {profile.name
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .map((p) => p[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase() || "L"}
-                </span>
+                <span className="text-lg font-semibold text-slate-600">{initials}</span>
               )}
             </div>
+
             <div className="min-w-0 flex-1 text-center sm:text-left">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Landlord
               </p>
               <h1 className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">
-                {profile.name}
+                {displayName}
               </h1>
+              {profile.username && (
+                <p className="mt-1 text-sm text-slate-500">@{profile.username}</p>
+              )}
+              {profile.description && (
+                <p className="mt-3 text-sm text-slate-600 leading-relaxed max-w-2xl whitespace-pre-wrap">
+                  {profile.description}
+                </p>
+              )}
             </div>
           </div>
         </section>
 
+        {/* Current listings */}
         <section className="mt-10" aria-labelledby="listings-heading">
           <h2
             id="listings-heading"
@@ -237,13 +261,14 @@ export default function LandlordPublicProfilePage() {
           >
             Current listings
           </h2>
-          {profile.current_listings.length === 0 ? (
+
+          {listings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
               No active listings right now.
             </div>
           ) : (
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {profile.current_listings.map((listing) => (
+              {listings.map((listing) => (
                 <li key={listing.id}>
                   <Link
                     href={`/listings/${listing.id}`}
@@ -253,11 +278,8 @@ export default function LandlordPublicProfilePage() {
                       {listing.title || "Untitled space"}
                     </span>
                     <span className="mt-1 text-xs text-slate-600">
-                      {[listing.city, listing.state].filter(Boolean).join(", ") ||
-                        "—"}
-                      {listing.property_type
-                        ? ` · ${listing.property_type}`
-                        : ""}
+                      {[listing.city, listing.state].filter(Boolean).join(", ") || "—"}
+                      {listing.property_type ? ` · ${listing.property_type}` : ""}
                     </span>
                     <span className="mt-3 text-xs font-medium text-[var(--brand)]">
                       View details →
@@ -269,21 +291,10 @@ export default function LandlordPublicProfilePage() {
           )}
         </section>
 
-        <section
-          className="mt-10 rounded-xl border border-slate-200 bg-slate-50/80 p-6 sm:p-8"
-          aria-labelledby="reviews-heading"
-        >
-          <h2
-            id="reviews-heading"
-            className="text-lg font-semibold text-slate-900 mb-2"
-          >
-            Reviews
-          </h2>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            {profile.reviews.message}
-          </p>
-        </section>
+        {/* Reviews — uses the shared ProfileReviews component */}
+        <ProfileReviews targetUserId={profile.id} />
       </main>
+
       <Footer />
     </div>
   );

@@ -6,27 +6,16 @@ import { ApiResponse } from '../types';
 
 const router = Router();
 
-interface PublicListingSummary {
+interface ReviewRow {
   id: string;
-  title: string | null;
-  city: string | null;
-  state: string | null;
-  property_type: string | null;
-  status: string | null;
-  created_at: string | null;
-}
-
-interface LandlordPublicProfileResponse {
-  id: string;
-  name: string;
-  profile_picture_url: string | null;
-  message_enabled: boolean;
-  current_listings: PublicListingSummary[];
-  reviews: {
-    implemented: boolean;
-    message: string;
-    items: unknown[];
-  };
+  target_user_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  reviewer_avatar: string | null;
+  role_context: 'landlord' | 'contractor' | 'renter';
+  rating: number;
+  content: string;
+  created_at: string;
 }
 
 function logProfileApi(method: string, path: string, userId?: string, success?: boolean, error?: string) {
@@ -36,113 +25,6 @@ function logProfileApi(method: string, path: string, userId?: string, success?: 
   console.log(msg, { timestamp: new Date().toISOString() });
 }
 
-/**
- * GET /api/profiles/public/:landlordId
- *
- * Public landlord profile for renters. Eligible if `is_landlord` is true or the
- * user owns at least one listing (covers hosts who list without the role flag).
- */
-router.get<
-  { landlordId: string },
-  ApiResponse<LandlordPublicProfileResponse> | ApiResponse
->(
-  '/public/:landlordId',
-  asyncHandler(async (req: Request<{ landlordId: string }>, res: Response) => {
-    const { landlordId } = req.params;
-
-    if (!landlordId) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', undefined, false, 'Missing landlordId');
-      res.status(400).json({ success: false, error: 'Missing landlordId' });
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, is_landlord, username, first_name, last_name, profile_picture_url')
-      .eq('id', landlordId)
-      .maybeSingle();
-
-    if (profileError) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, profileError.message);
-      res.status(500).json({ success: false, error: 'Failed to load landlord profile' });
-      return;
-    }
-
-    if (!profile) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'Profile not found');
-      res.status(404).json({ success: false, error: 'Landlord profile not found' });
-      return;
-    }
-
-    const isLandlordRole = Boolean((profile as any).is_landlord);
-
-    const { count: listingCount, error: countError } = await supabaseAdmin
-      .from('listings')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', landlordId);
-
-    if (countError) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, countError.message);
-      res.status(500).json({ success: false, error: 'Failed to verify landlord listings' });
-      return;
-    }
-
-    const hasListings = (listingCount ?? 0) > 0;
-
-    if (!isLandlordRole && !hasListings) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, 'Not a landlord or host');
-      res.status(404).json({ success: false, error: 'Landlord profile not found' });
-      return;
-    }
-
-    const { data: listings, error: listingsError } = await supabaseAdmin
-      .from('listings')
-      .select('id, title, city, state, property_type, status, created_at')
-      .eq('user_id', landlordId)
-      .eq('status', 'Available')
-      .order('created_at', { ascending: false });
-
-    if (listingsError) {
-      logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, false, listingsError.message);
-      res.status(500).json({ success: false, error: 'Failed to load landlord listings' });
-      return;
-    }
-
-    const firstName = (profile as any).first_name?.trim?.() || '';
-    const lastName = (profile as any).last_name?.trim?.() || '';
-    const username = (profile as any).username?.trim?.() || '';
-    const displayName =
-      [firstName, lastName].filter(Boolean).join(' ').trim() ||
-      username ||
-      'Landlord';
-
-    const currentListings: PublicListingSummary[] = ((listings ?? []) as any[]).map((listing) => ({
-      id: listing.id ?? '',
-      title: listing.title ?? null,
-      city: listing.city ?? null,
-      state: listing.state ?? null,
-      property_type: listing.property_type ?? null,
-      status: listing.status ?? null,
-      created_at: listing.created_at ?? null,
-    }));
-
-    const payload: LandlordPublicProfileResponse = {
-      id: (profile as any).id,
-      name: displayName,
-      profile_picture_url: (profile as any).profile_picture_url ?? null,
-      message_enabled: true,
-      current_listings: currentListings,
-      reviews: {
-        implemented: false,
-        message: 'No reviews yet.',
-        items: [],
-      },
-    };
-
-    logProfileApi('GET', '/api/profiles/public/:landlordId', landlordId, true);
-    res.json({ success: true, data: payload });
-  })
-);
 
 /**
  * GET /api/profiles/me
@@ -453,6 +335,117 @@ router.patch<
 
     logProfileApi('PATCH', '/api/profiles/roles', userId, true);
     res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /api/profiles/:targetUserId/reviews
+ *
+ * Returns all reviews written for the given user, ordered newest first.
+ * Uses supabaseAdmin to bypass RLS — reviews are public data.
+ */
+router.get<
+  { targetUserId: string },
+  ApiResponse<ReviewRow[]> | ApiResponse
+>(
+  '/:targetUserId/reviews',
+  asyncHandler(async (req: Request<{ targetUserId: string }>, res: Response) => {
+    const { targetUserId } = req.params;
+
+    if (!targetUserId) {
+      res.status(400).json({ success: false, error: 'Missing targetUserId' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('reviews')
+      .select('id, target_user_id, reviewer_id, reviewer_name, reviewer_avatar, role_context, rating, content, created_at')
+      .eq('target_user_id', targetUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logProfileApi('GET', `/api/profiles/${targetUserId}/reviews`, undefined, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to load reviews' });
+      return;
+    }
+
+    logProfileApi('GET', `/api/profiles/${targetUserId}/reviews`, undefined, true);
+    res.json({ success: true, data: (data ?? []) as ReviewRow[] });
+  })
+);
+
+/**
+ * POST /api/profiles/:targetUserId/reviews
+ *
+ * Creates a new review for the given user.
+ * Expects X-User-Id header for the reviewer's identity.
+ * Validates: rating 1-5, non-empty content, cannot self-review, one per pair.
+ */
+router.post<
+  { targetUserId: string },
+  ApiResponse<ReviewRow> | ApiResponse
+>(
+  '/:targetUserId/reviews',
+  asyncHandler(async (req: Request<{ targetUserId: string }>, res: Response) => {
+    const { targetUserId } = req.params;
+    const reviewerId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
+
+    if (!reviewerId) {
+      res.status(401).json({ success: false, error: 'Missing X-User-Id header' });
+      return;
+    }
+
+    if (reviewerId === targetUserId) {
+      res.status(400).json({ success: false, error: 'You cannot review your own profile' });
+      return;
+    }
+
+    const { rating, role_context, content } = req.body as {
+      rating?: number;
+      role_context?: string;
+      content?: string;
+    };
+
+    if (!rating || rating < 1 || rating > 5) {
+      res.status(400).json({ success: false, error: 'Rating must be between 1 and 5' });
+      return;
+    }
+
+    if (!role_context || !['landlord', 'contractor', 'renter'].includes(role_context)) {
+      res.status(400).json({ success: false, error: 'Invalid role_context' });
+      return;
+    }
+
+    if (!content || content.trim().length === 0) {
+      res.status(400).json({ success: false, error: 'Review content cannot be empty' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('reviews')
+      .insert({
+        target_user_id: targetUserId,
+        reviewer_id: reviewerId,
+        role_context,
+        rating,
+        content: content.trim(),
+      })
+      .select('id, target_user_id, reviewer_id, reviewer_name, reviewer_avatar, role_context, rating, content, created_at')
+      .single();
+
+    if (error) {
+      // Unique constraint violation → already reviewed
+      if (error.code === '23505') {
+        res.status(409).json({ success: false, error: 'You have already reviewed this user' });
+        return;
+      }
+      logProfileApi('POST', `/api/profiles/${targetUserId}/reviews`, reviewerId, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to submit review' });
+      return;
+    }
+
+    logProfileApi('POST', `/api/profiles/${targetUserId}/reviews`, reviewerId, true);
+    res.status(201).json({ success: true, data: data as ReviewRow });
   })
 );
 

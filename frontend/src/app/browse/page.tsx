@@ -8,9 +8,35 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { SaveListingButton } from "@/components/SaveListingButton";
 
+function ListingImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
+  if (!src) {
+    return (
+      <div className="h-28 rounded-md mb-4 bg-slate-50 border border-slate-100 flex items-center justify-center text-xs text-slate-400">
+        No image
+      </div>
+    );
+  }
+  return (
+    <div className="h-28 rounded-md overflow-hidden mb-4 relative bg-slate-100">
+      {!loaded && (
+        <div className="absolute inset-0 animate-pulse bg-slate-100" />
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+        onLoad={() => setLoaded(true)}
+      />
+    </div>
+  );
+}
+
 type ListingView = {
   id: string;
   title: string;
+  address?: string | null;
   city?: string | null;
   state?: string | null;
   property_type?: string | null;
@@ -27,6 +53,7 @@ type SavedListingRow = {
 type ListingRow = {
   id: string;
   title: string;
+  address: string | null;
   city: string | null;
   state: string | null;
   property_type: string | null;
@@ -62,6 +89,7 @@ export default function BrowsePage() {
   const [error, setError] = useState<string | null>(null);
   const [listings, setListings] = useState<ListingView[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
+  const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({
     propertyType: "",
     city: "",
@@ -126,7 +154,7 @@ export default function BrowsePage() {
       try {
         const { data: listingRows } = await supabase
           .from("listings")
-          .select("id, title, city, state, property_type")
+          .select("id, title, address, city, state, property_type")
           .order("created_at", { ascending: false });
 
         if (!listingRows || listingRows.length === 0) {
@@ -161,6 +189,7 @@ export default function BrowsePage() {
           return {
             id: r.id,
             title: r.title,
+            address: r.address,
             city: r.city,
             state: r.state,
             property_type: r.property_type,
@@ -217,6 +246,15 @@ export default function BrowsePage() {
   );
 
   const filteredListings = listings.filter((listing) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = [listing.title, listing.address, listing.city, listing.property_type]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+
     if (filters.city && listing.city !== filters.city) return false;
     if (filters.state && listing.state !== filters.state) return false;
     if (
@@ -276,12 +314,29 @@ export default function BrowsePage() {
           Browse Spaces
         </h1>
         <p className="mt-3 text-slate-600 max-w-2xl leading-relaxed">
-          Search and filter available commercial spaces. Find venues by
-          location, type, and budget. Listings will appear here once property
-          management is wired up.
+          Search and filter available commercial spaces across NYC.
+          Find offices, retail, studios, and more by location, type, and budget.
         </p>
 
-        <section className="mt-10" aria-label="Filters">
+        <div className="mt-8 relative">
+          <input
+            type="text"
+            placeholder="Search by name, address, neighborhood, or type…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:border-[var(--brand)]/30"
+          />
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <section className="mt-6" aria-label="Filters">
           <h2 className="text-lg font-semibold text-slate-900 mb-3">
             Filter results
           </h2>
@@ -387,9 +442,23 @@ export default function BrowsePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {loadingListings ? (
-              <div className="col-span-3 text-center text-slate-500">
-                Loading listings…
-              </div>
+              <>
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col border border-slate-200/80 rounded-2xl p-5 bg-white animate-pulse"
+                  >
+                    <div className="h-28 rounded-md bg-slate-100 mb-4" />
+                    <div className="h-4 w-3/4 rounded bg-slate-100 mb-2" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100 mb-2" />
+                    <div className="h-4 w-1/3 rounded bg-slate-100 mt-1" />
+                    <div className="mt-4 flex justify-between">
+                      <div className="h-8 w-8 rounded-full bg-slate-100" />
+                      <div className="h-4 w-16 rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </>
             ) : listings.length === 0 ? (
               <div className="col-span-3 text-center text-slate-500">
                 No listings yet.
@@ -407,20 +476,7 @@ export default function BrowsePage() {
                     key={listing.id}
                     className="flex flex-col border border-slate-200/80 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="h-28 rounded-md overflow-hidden mb-4 flex items-center justify-center text-xs text-slate-400">
-                      {listing.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={listing.image}
-                          alt={listing.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-50 border border-slate-100 flex items-center justify-center text-xs text-slate-400">
-                          No image
-                        </div>
-                      )}
-                    </div>
+                    <ListingImage src={listing.image} alt={listing.title} />
                     <h3 className="text-sm font-semibold text-slate-900">
                       {listing.title}
                     </h3>

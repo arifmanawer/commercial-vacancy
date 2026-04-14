@@ -12,7 +12,7 @@ function isAuthPath(pathname: string) {
   return authPaths.some((p) => pathname === p);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -23,7 +23,13 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: any[]) {
+        setAll(
+          cookiesToSet: Array<{
+            name: string;
+            value: string;
+            options: any;
+          }>
+        ) {
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );

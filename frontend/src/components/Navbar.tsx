@@ -15,7 +15,6 @@ const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/about", label: "About" },
   { href: "/map", label: "Map" },
-  { href: "/contact", label: "Contact" },
 ];
 
 function NavLink({ href, label }: { href: string; label: string }) {

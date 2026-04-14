@@ -60,7 +60,7 @@ router.get<
       data: listing,
       error: listingError,
     } = await supabaseAdmin
-      .from<ListingRow>('listings')
+      .from('listings')
       .select('id, user_id')
       .eq('id', id)
       .maybeSingle();

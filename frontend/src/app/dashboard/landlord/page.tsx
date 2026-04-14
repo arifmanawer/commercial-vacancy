@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabaseClient";
 export default function LandlordDashboardPage() {
   const { user } = useAuth();
   const [listings, setListings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [loadingInquiries, setLoadingInquiries] = useState(false);
@@ -21,6 +21,8 @@ export default function LandlordDashboardPage() {
   const [editMode, setEditMode] = useState<"reschedule" | "decline" | null>(
     null,
   );
+  const [updatingInquiryId, setUpdatingInquiryId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [contractorJobs, setContractorJobs] = useState<any[]>([]);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [loadingJobs, setLoadingJobs] = useState(false);
@@ -118,7 +120,7 @@ export default function LandlordDashboardPage() {
   }, [user]);
 
   const handleDelete = async (id: string) => {
-    const listing = listings.find((l) => l.id === id);
+    const listing = listings.find((l: any) => l.id === id);
     if (!listing) {
       setError("Listing not found.");
       return;
@@ -129,18 +131,21 @@ export default function LandlordDashboardPage() {
     }
     if (!confirm("Are you sure you want to delete this listing?")) return;
     setError(null);
+    setDeletingId(id);
     const { error } = await supabase.from("listings").delete().eq("id", id);
     if (error) {
       setError(error.message);
     } else {
-      setListings((prev) => prev.filter((l) => l.id !== id));
+      setListings((prev) => prev.filter((l: any) => l.id !== id));
     }
+    setDeletingId(null);
   };
 
   const updateInquiry = async (
     id: string,
     updates: Record<string, unknown>,
   ) => {
+    setUpdatingInquiryId(id);
     const { error } = await supabase
       .from("listing_inquiries")
       .update(updates)
@@ -149,12 +154,14 @@ export default function LandlordDashboardPage() {
       setInquiriesError(
         error.message || "Could not update this request. Please try again.",
       );
+      setUpdatingInquiryId(null);
       return;
     }
     setInquiriesError(null);
     setInquiries((prev) =>
       prev.map((inq) => (inq.id === id ? { ...inq, ...updates } : inq)),
     );
+    setUpdatingInquiryId(null);
   };
 
   return (
@@ -195,7 +202,11 @@ export default function LandlordDashboardPage() {
                 Active listings
               </p>
               <p className="text-2xl font-bold text-slate-900">
-                {listings.filter((l) => l.status === "Available").length}
+                {loading ? (
+                  <span className="inline-block h-7 w-8 rounded bg-slate-100 animate-pulse" />
+                ) : (
+                  listings.filter((l: any) => l.status === "Available").length
+                )}
               </p>
               <p className="text-xs text-slate-500">
                 Publish a space to start receiving booking requests.
@@ -207,7 +218,11 @@ export default function LandlordDashboardPage() {
                 Pending requests
               </p>
               <p className="text-2xl font-bold text-slate-900">
-                {inquiries.filter((inq) => inq.status === "pending").length}
+                {loading || loadingInquiries ? (
+                  <span className="inline-block h-7 w-8 rounded bg-slate-100 animate-pulse" />
+                ) : (
+                  inquiries.filter((inq: any) => inq.status === "pending").length
+                )}
               </p>
               <p className="text-xs text-slate-500">
                 New booking requests from renters will show up here.
@@ -218,7 +233,13 @@ export default function LandlordDashboardPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                 Contractor jobs
               </p>
-              <p className="text-2xl font-bold text-slate-900">$0.00</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {loading || loadingJobs ? (
+                  <span className="inline-block h-7 w-8 rounded bg-slate-100 animate-pulse" />
+                ) : (
+                  contractorJobs.length
+                )}
+              </p>
               <p className="text-xs text-slate-500">
                 Track requests, accepted work, and completed jobs.
               </p>
@@ -317,14 +338,14 @@ export default function LandlordDashboardPage() {
                       <button
                         onClick={() => handleDelete(listing.id)}
                         className="px-3 py-1.5 rounded-md border border-red-200 bg-red-50 text-xs text-red-700 hover:bg-red-100 disabled:opacity-60"
-                        disabled={listing.status !== "Available"}
+                        disabled={listing.status !== "Available" || deletingId === listing.id}
                         title={
                           listing.status !== "Available"
                             ? "Only available listings can be deleted"
                             : "Delete"
                         }
                       >
-                        Delete
+                        {deletingId === listing.id ? "Deleting…" : "Delete"}
                       </button>
                     </div>
                   </li>
@@ -440,7 +461,8 @@ export default function LandlordDashboardPage() {
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+                              disabled={updatingInquiryId === inq.id}
+                              className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                               onClick={() =>
                                 updateInquiry(inq.id, {
                                   status: "accepted",
@@ -448,11 +470,12 @@ export default function LandlordDashboardPage() {
                                 })
                               }
                             >
-                              Accept
+                              {updatingInquiryId === inq.id ? "Updating…" : "Accept"}
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100"
+                              disabled={updatingInquiryId === inq.id}
+                              className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100 disabled:opacity-60"
                               onClick={() => {
                                 setEditingInquiryId(inq.id);
                                 setEditMode("decline");
@@ -464,7 +487,8 @@ export default function LandlordDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-50"
+                              disabled={updatingInquiryId === inq.id}
+                              className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-60"
                               onClick={() => {
                                 setEditingInquiryId(inq.id);
                                 setEditMode("reschedule");
@@ -520,7 +544,7 @@ export default function LandlordDashboardPage() {
                                     <button
                                       type="button"
                                       className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-                                      disabled={!rescheduleTime}
+                                      disabled={!rescheduleTime || updatingInquiryId === inq.id}
                                       onClick={async () => {
                                         if (!rescheduleTime) return;
                                         await updateInquiry(inq.id, {
@@ -536,7 +560,7 @@ export default function LandlordDashboardPage() {
                                         setRescheduleNote("");
                                       }}
                                     >
-                                      Send proposal
+                                      {updatingInquiryId === inq.id ? "Sending…" : "Send proposal"}
                                     </button>
                                   </div>
                                 </>
@@ -569,7 +593,8 @@ export default function LandlordDashboardPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      className="inline-flex items-center rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700"
+                                      className="inline-flex items-center rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                                      disabled={updatingInquiryId === inq.id}
                                       onClick={async () => {
                                         await updateInquiry(inq.id, {
                                           status: "declined",
@@ -584,7 +609,7 @@ export default function LandlordDashboardPage() {
                                         setRescheduleNote("");
                                       }}
                                     >
-                                      Confirm decline
+                                      {updatingInquiryId === inq.id ? "Declining…" : "Confirm decline"}
                                     </button>
                                   </div>
                                 </>

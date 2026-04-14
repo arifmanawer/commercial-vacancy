@@ -36,9 +36,34 @@ if (config.nodeEnv !== 'test') {
   app.use(morgan('dev'));
 }
 
+// Root — browsers hitting the API host see this instead of a 404 JSON body
+app.get('/', (_req, res) => {
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>Commercial Vacancy API</title></head>
+<body>
+  <h1>Commercial Vacancy API</h1>
+  <p>This URL is the <strong>API server</strong>, not the website. The web app is served separately.</p>
+  <ul>
+    <li><a href="/api/">API root (JSON)</a></li>
+    <li><a href="/health">Health check</a></li>
+    <li><a href="/test">Test</a></li>
+  </ul>
+  <p>end</p>
+</body>
+</html>`);
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Simple browser-friendly check (open https://your-host/test in a tab)
+app.get('/test', (_req, res) => {
+  res.type('text/plain').send(
+    `Commercial Vacancy API — test OK\n${new Date().toISOString()}\n`
+  );
 });
 
 // API routes

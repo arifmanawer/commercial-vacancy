@@ -32,7 +32,7 @@ const ROLES = [
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, isLandlord, isContractor, loading: authLoading, refreshProfile } = useAuth();
+  const { user, profile, isLandlord, isContractor, loading: authLoading, refreshProfile, updateProfileLocally } = useAuth();
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -67,6 +67,19 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(null);
     try {
+      // Delete old avatar from storage if it exists to prevent orphaned files
+      // We don't await this so it doesn't block the UI
+      if (profilePictureUrl) {
+        const parts = profilePictureUrl.split("/public/profile_avatars/");
+        if (parts.length === 2) {
+          const filePath = parts[1].split('?')[0]; // Remove query params like ?t=...
+          supabase.storage
+            .from("profile_avatars")
+            .remove([filePath])
+            .catch(e => console.error("Ignored storage deletion error:", e));
+        }
+      }
+
       const ext = file.name.split(".").pop() || "jpg";
       const path = `avatars/${user.id}/${Date.now()}.${ext}`;
       const { error: uploadError, data: uploadData } = await supabase.storage
@@ -95,8 +108,8 @@ export default function ProfilePage() {
         throw new Error(profileError.message || "Failed to save profile picture URL");
       }
 
+      updateProfileLocally({ profile_picture_url: publicUrl });
       setProfilePictureUrl(publicUrl);
-      await refreshProfile();
       router.refresh();
       setSuccess("Profile picture updated.");
     } catch (err) {
@@ -109,6 +122,49 @@ export default function ProfilePage() {
       setAvatarUploading(false);
       // clear the file input value so the same file can be reselected if needed
       e.target.value = "";
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    if (!user?.id) return;
+    setAvatarUploading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // Delete avatar from storage
+      // We don't await this so it doesn't block the UI
+      if (profilePictureUrl) {
+        const parts = profilePictureUrl.split("/public/profile_avatars/");
+        if (parts.length === 2) {
+          const filePath = parts[1].split('?')[0]; // Remove query params like ?t=...
+          supabase.storage
+            .from("profile_avatars")
+            .remove([filePath])
+            .catch(e => console.error("Ignored storage deletion error:", e));
+        }
+      }
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ profile_picture_url: null })
+        .eq("id", user.id);
+
+      if (profileError) {
+        throw new Error(profileError.message || "Failed to remove profile picture");
+      }
+
+      updateProfileLocally({ profile_picture_url: null });
+      setProfilePictureUrl("");
+      router.refresh();
+      setSuccess("Profile picture removed.");
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message || "Failed to remove profile picture."
+          : "Failed to remove profile picture.";
+      setError(msg);
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
@@ -179,7 +235,14 @@ export default function ProfilePage() {
         throw new Error(updateError.message || "Failed to update profile. Try again.");
       }
 
-      await refreshProfile();
+      updateProfileLocally({
+        username: username.trim() || null,
+        first_name: firstName.trim() || null,
+        last_name: lastName.trim() || null,
+        address: address.trim() || null,
+        description: description.trim() || null,
+        profile_picture_url: profilePictureUrl.trim() || null,
+      });
       router.refresh();
       setSuccess("Profile updated.");
     } catch (err) {
@@ -235,7 +298,7 @@ export default function ProfilePage() {
 
       <main className="max-w-2xl mx-auto px-6 py-16">
         <Link
-          href="/dashboard/renter"
+          href={isLandlord ? "/dashboard/landlord" : isContractor ? "/dashboard/contractor" : "/dashboard/renter"}
           className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded mb-6"
         >
           ← Back to dashboard
@@ -261,10 +324,10 @@ export default function ProfilePage() {
                 {[firstName, lastName].filter(Boolean).join(" ") || username || user.email}
               </p>
               <p className="text-xs text-slate-500 truncate">Update your public profile info.</p>
-              <div className="mt-2">
+              <div className="mt-2 flex items-center gap-2">
                 <label className="inline-flex items-center text-xs font-medium text-slate-700 cursor-pointer">
                   <span className="px-2.5 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50">
-                    {avatarUploading ? "Uploading..." : "Change photo"}
+                    {avatarUploading ? "Loading..." : "Change photo"}
                   </span>
                   <input
                     type="file"
@@ -274,6 +337,16 @@ export default function ProfilePage() {
                     disabled={avatarUploading}
                   />
                 </label>
+                {profilePictureUrl && (
+                  <button
+                    type="button"
+                    onClick={handleAvatarDelete}
+                    disabled={avatarUploading}
+                    className="px-2.5 py-1 rounded-md border border-red-200 bg-white text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Delete photo
+                  </button>
+                )}
               </div>
             </div>
           </div>

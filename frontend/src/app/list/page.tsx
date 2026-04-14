@@ -8,6 +8,7 @@ import CreateListingForm from "@/components/CreateListingForm";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useToast } from "@/components/Toast";
 
 type ListingFormInput = {
   title: string;
@@ -27,6 +28,7 @@ export default function ListPage() {
   const { user, isLandlord, loading } = useAuth();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
 
   async function handleCreateListing(data: ListingFormInput) {
     if (!user) {
@@ -108,7 +110,7 @@ export default function ListPage() {
         if (imgErr) console.warn("images insert error", imgErr.message);
       }
 
-      // Redirect to browse so listing is visible
+      toast("Listing created successfully!");
       router.push("/browse");
     } catch (err: any) {
       console.error(err);
@@ -132,8 +134,8 @@ export default function ListPage() {
         </Link>
         <h1 className="text-3xl md:text-4xl font-bold text-slate-900">List Your Space</h1>
         <p className="mt-3 text-slate-600 leading-relaxed">
-          Landlords can add property listings here. The form will be connected
-          when the properties API is ready.
+          Add your commercial property to the platform. Provide details,
+          upload photos, and start receiving inquiries from interested renters.
         </p>
 
         <section className="mt-10" aria-labelledby="what-you-need-heading">

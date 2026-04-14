@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useConversations } from "@/hooks/useConversations";
@@ -23,6 +24,7 @@ function formatRelativeTime(iso: string | null): string {
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const { conversations, loading, error } = useConversations();
 
   return (
@@ -72,12 +74,18 @@ export default function MessagesPage() {
             <div className="space-y-3">
               {conversations.map((conv) => {
                 const unread = conv.unread_count > 0;
-                const secondaryLine =
-                  conv.context_type === "listing"
-                    ? "Listing conversation"
-                    : conv.context_type === "contractor"
-                    ? "Contractor conversation"
-                    : "General conversation";
+                const hasListing =
+                  conv.context_type === "listing" && conv.context_listing_id;
+                const title = hasListing && conv.context_listing_title
+                  ? conv.context_listing_title
+                  : conv.context_type === "listing"
+                  ? "Listing conversation"
+                  : conv.context_type === "contractor"
+                  ? "Contractor conversation"
+                  : "General conversation";
+                const subtitle = hasListing && conv.context_listing_address
+                  ? conv.context_listing_address
+                  : null;
                 return (
                   <Link
                     key={conv.id}
@@ -88,7 +96,7 @@ export default function MessagesPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-slate-900 truncate">
-                            {secondaryLine}
+                            {title}
                           </p>
                           {unread && (
                             <span className="inline-flex items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-semibold px-1.5 py-0.5">
@@ -96,6 +104,11 @@ export default function MessagesPage() {
                             </span>
                           )}
                         </div>
+                        {subtitle && (
+                          <p className="mt-0.5 text-xs text-slate-400 truncate">
+                            {subtitle}
+                          </p>
+                        )}
                         <p className="mt-1 text-xs text-slate-500 truncate">
                           {conv.last_message_preview || "No messages yet"}
                         </p>
@@ -104,6 +117,19 @@ export default function MessagesPage() {
                         <span className="text-[11px] text-slate-400">
                           {formatRelativeTime(conv.last_message_at)}
                         </span>
+                        {hasListing && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              router.push(`/listings/${conv.context_listing_id}`);
+                            }}
+                            className="text-[11px] font-medium text-[var(--brand)] hover:underline"
+                          >
+                            View listing
+                          </button>
+                        )}
                       </div>
                     </div>
                   </Link>

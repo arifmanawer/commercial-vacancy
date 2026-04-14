@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   GoogleMap,
   Marker,
@@ -43,7 +43,7 @@ const containerStyle = {
   height: "100%",
 };
 
-type GeocodedListing = {
+export type GeocodedListing = {
   id: string;
   title: string;
   address: string;
@@ -53,7 +53,46 @@ type GeocodedListing = {
   position: google.maps.LatLngLiteral;
 };
 
-export default function MapView() {
+export type NearbyListingSummary = {
+  id: string;
+  title: string;
+  address: string;
+  city: string;
+  state: string;
+  property_type: string;
+  distanceMiles: number;
+};
+
+const EARTH_RADIUS_MILES = 3958.8;
+
+function distanceInMiles(
+  a: google.maps.LatLngLiteral,
+  b: google.maps.LatLngLiteral
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+
+  const haversine =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+
+  const c = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+  return EARTH_RADIUS_MILES * c;
+}
+
+type MapViewProps = {
+  onNearbyChange?: (nearby: NearbyListingSummary[]) => void;
+};
+
+export default function MapView({ onNearbyChange }: MapViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [center, setCenter] = useState<google.maps.LatLngLiteral>(DEFAULT_CENTER);
   const [searchLocation, setSearchLocation] =
@@ -62,6 +101,9 @@ export default function MapView() {
     useState<google.maps.places.Autocomplete | null>(null);
   const [listings, setListings] = useState<GeocodedListing[]>([]);
   const [loadingListings, setLoadingListings] = useState(true);
+  const [userLocation, setUserLocation] =
+    useState<google.maps.LatLngLiteral | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
   const { isLoaded } = useGoogleMapsLoader();
 
@@ -131,6 +173,38 @@ export default function MapView() {
     fetchAndGeocode();
   }, [isLoaded]);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!("geolocation" in navigator)) return;
+
+    setGeoError(null);
+
+    // Use watchPosition so we don't fail if the first GPS fix is slow.
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const location: google.maps.LatLngLiteral = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserLocation(location);
+        setCenter(location);
+      },
+      (error) => {
+        console.warn("Unable to retrieve user location:", error);
+        setGeoError(error.message || "Unable to retrieve user location");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 60_000,
+        timeout: 30_000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isLoaded]);
+
   const handlePlaceChanged = () => {
     if (!autocomplete) return;
     const place = autocomplete.getPlace();
@@ -153,6 +227,49 @@ export default function MapView() {
     setActiveId(null);
   };
 
+  const nearbyListings = useMemo(() => {
+    if (!userLocation) return [];
+
+    return listings
+      .map((listing) => ({
+        ...listing,
+        distanceMiles: distanceInMiles(userLocation, listing.position),
+      }))
+      .filter((listing) => listing.distanceMiles <= 5)
+      .sort((a, b) => a.distanceMiles - b.distanceMiles);
+  }, [listings, userLocation]);
+
+  const nearbyListingIds = useMemo(
+    () => new Set(nearbyListings.map((listing) => listing.id)),
+    [nearbyListings]
+  );
+
+  useEffect(() => {
+    if (!onNearbyChange) return;
+
+    onNearbyChange(
+      nearbyListings.map(
+        ({
+          id,
+          title,
+          address,
+          city,
+          state,
+          property_type,
+          distanceMiles,
+        }) => ({
+          id,
+          title,
+          address,
+          city,
+          state,
+          property_type,
+          distanceMiles,
+        })
+      )
+    );
+  }, [nearbyListings, onNearbyChange]);
+
   if (!isLoaded) {
     return (
       <div className="h-[480px] w-full rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500">
@@ -166,6 +283,11 @@ export default function MapView() {
       {loadingListings && (
         <div className="absolute inset-0 z-20 bg-white/50 backdrop-blur-[1px] flex items-center justify-center text-xs font-medium text-slate-600">
           Syncing listings...
+        </div>
+      )}
+      {geoError && (
+        <div className="absolute inset-x-0 top-0 z-30 mx-auto w-[min(480px,90%)] mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 shadow-sm">
+          {geoError}
         </div>
       )}
       <GoogleMap
@@ -195,6 +317,13 @@ export default function MapView() {
           <Marker
             key={space.id}
             position={space.position}
+            icon={
+              nearbyListingIds.has(space.id)
+                ? {
+                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                  }
+                : undefined
+            }
             onClick={() => setActiveId(space.id)}
           >
             {activeId === space.id && (
@@ -214,11 +343,20 @@ export default function MapView() {
           </Marker>
         ))}
 
+        {userLocation && (
+          <Marker
+            position={userLocation}
+            icon={{
+              url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+            }}
+          />
+        )}
+
         {searchLocation && (
           <Marker
             position={searchLocation}
             icon={{
-              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+              url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
             }}
           />
         )}

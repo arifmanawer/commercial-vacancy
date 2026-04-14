@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ToastProvider } from "@/components/Toast";
+import RouteLoader from "@/components/RouteLoader";
 
 export const metadata: Metadata = {
   title: "Smart Vacancy Reuse Platform",
@@ -15,7 +17,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <RouteLoader />
+            {children}
+          </ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

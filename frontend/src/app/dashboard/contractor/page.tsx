@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import type {
   Contractor,
   ContractorAvailabilityStatus,
@@ -69,6 +70,8 @@ export default function ContractorDashboardPage() {
   const [jobs, setJobs] = useState<ContractorJob[]>([]);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -133,6 +136,7 @@ export default function ContractorDashboardPage() {
 
     const fetchJobs = async () => {
       setJobsError(null);
+      setLoadingJobs(true);
       try {
         const res = await fetch(
           `${getApiUrl()}/api/contractor-jobs?role=contractor`,
@@ -157,6 +161,8 @@ export default function ContractorDashboardPage() {
         setJobsError(
           err instanceof Error ? err.message : "Failed to load contractor jobs",
         );
+      } finally {
+        setLoadingJobs(false);
       }
     };
 
@@ -212,6 +218,7 @@ export default function ContractorDashboardPage() {
       }
 
       setExisting(json.data);
+      toast("Profile saved successfully!");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save contractor profile"
@@ -509,7 +516,11 @@ export default function ContractorDashboardPage() {
             </div>
           )}
 
-          {jobs.length === 0 && !jobsError ? (
+          {loadingJobs ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              Loading job requests…
+            </div>
+          ) : jobs.length === 0 && !jobsError ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
               You don&apos;t have any job requests yet. When landlords request
               work, it will appear here.

@@ -9,8 +9,7 @@ const exploreLinks = [
 
 const companyLinks = [
   { href: "/how-it-works", label: "How It Works" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
+  { href: "/about", label: "About & Contact" },
 ];
 
 const linkClass =

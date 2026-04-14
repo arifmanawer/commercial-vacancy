@@ -29,7 +29,7 @@ function logStripeConnect(
  * Creates or reuses a Stripe Connect account for the landlord and returns an onboarding URL.
  * Auth model: expects X-User-Id header (or ?user_id= query param) just like other routes.
  */
-router.post<unknown, ConnectOnboardingResponse>(
+router.post<{}, ConnectOnboardingResponse>(
   '/connect/onboarding',
   asyncHandler(async (req: Request, res: Response<ConnectOnboardingResponse>) => {
     const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);

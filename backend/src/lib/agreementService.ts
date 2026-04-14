@@ -81,7 +81,7 @@ async function loadBookingContext(bookingId: string): Promise<{
     data: booking,
     error: bookingError,
   } = await supabaseAdmin
-    .from<BookingRow>('bookings')
+    .from('bookings')
     .select(
       'id, offer_id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, currency, total_amount, platform_fee_amount, landlord_amount'
     )
@@ -105,7 +105,7 @@ async function loadBookingContext(bookingId: string): Promise<{
     data: offer,
     error: offerError,
   } = await supabaseAdmin
-    .from<OfferRow>('offers')
+    .from('offers')
     .select(
       'id, listing_id, landlord_id, renter_id, rate_type, rate_amount, currency, start_date, duration, subtotal_amount, platform_fee_amount, total_amount, status, agreement_pdf_url'
     )
@@ -130,7 +130,7 @@ async function loadBookingContext(bookingId: string): Promise<{
   }
 
   const { data: listing, error: listingError } = await supabaseAdmin
-    .from<ListingRow>('listings')
+    .from('listings')
     .select('id, title, address, city, state, postal_code')
     .eq('id', booking.listing_id)
     .maybeSingle();
@@ -144,7 +144,7 @@ async function loadBookingContext(bookingId: string): Promise<{
   }
 
   const { data: landlord, error: landlordError } = await supabaseAdmin
-    .from<ProfileRow>('profiles')
+    .from('profiles')
     .select('id, full_name, email')
     .eq('id', booking.landlord_id)
     .maybeSingle();
@@ -158,7 +158,7 @@ async function loadBookingContext(bookingId: string): Promise<{
   }
 
   const { data: renter, error: renterError } = await supabaseAdmin
-    .from<ProfileRow>('profiles')
+    .from('profiles')
     .select('id, full_name, email')
     .eq('id', booking.renter_id)
     .maybeSingle();
@@ -197,11 +197,11 @@ function buildAgreementPdfBuffer(context: {
     const doc = new PDFDocument({ margin: 50 });
     const chunks: Buffer[] = [];
 
-    doc.on('data', (chunk) => {
-      chunks.push(chunk as Buffer);
+    doc.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
     });
 
-    doc.on('error', (err) => {
+    doc.on('error', (err: Error) => {
       reject(err);
     });
 
@@ -355,7 +355,7 @@ async function saveAgreementUrlOnOffer(offerId: string, url: string | null): Pro
   }
 
   const { error } = await supabaseAdmin
-    .from<OfferRow>('offers')
+    .from('offers')
     .update({ agreement_pdf_url: url } as Partial<OfferRow>)
     .eq('id', offerId);
 

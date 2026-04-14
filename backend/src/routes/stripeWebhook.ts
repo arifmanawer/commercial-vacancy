@@ -39,7 +39,7 @@ function logStripeWebhook(message: string, extra?: Record<string, unknown>) {
 
 async function markBookingReservedAndOfferAccepted(booking: BookingRow) {
   const { data: updatedBooking, error: bookingUpdateError } = await supabaseAdmin
-    .from<BookingRow>('bookings')
+    .from('bookings')
     .update({ status: 'reserved' } as Partial<BookingRow>)
     .eq('id', booking.id)
     .select('id, offer_id, status, payment_intent_id')
@@ -61,7 +61,7 @@ async function markBookingReservedAndOfferAccepted(booking: BookingRow) {
   }
 
   const { error: offerUpdateError } = await supabaseAdmin
-    .from<OfferRow>('offers')
+    .from('offers')
     .update({ status: 'accepted' } as Partial<OfferRow>)
     .eq('id', updatedBooking.offer_id);
 
@@ -75,7 +75,7 @@ async function markBookingReservedAndOfferAccepted(booking: BookingRow) {
 
 async function markBookingPaymentFailed(booking: BookingRow) {
   const { error } = await supabaseAdmin
-    .from<BookingRow>('bookings')
+    .from('bookings')
     .update({ status: 'payment_failed' } as Partial<BookingRow>)
     .eq('id', booking.id);
 
@@ -95,7 +95,7 @@ async function markBookingRefundCompleted(
     data: booking,
     error: bookingError,
   } = await supabaseAdmin
-    .from<BookingRow>('bookings')
+    .from('bookings')
     .select('id, offer_id, status, payment_intent_id, refund_amount')
     .eq('payment_intent_id', paymentIntentId)
     .maybeSingle();
@@ -119,7 +119,7 @@ async function markBookingRefundCompleted(
       : booking.refund_amount ?? null;
 
   const { error: updateError } = await supabaseAdmin
-    .from<BookingRow>('bookings')
+    .from('bookings')
     .update({
       status: 'refund_completed' as BookingStatus,
       refund_amount: effectiveRefundAmount,
@@ -165,7 +165,8 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
   }
 
   try {
-    switch (event.type) {
+    const eventType = event.type as string;
+    switch (eventType) {
       case 'payment_intent.succeeded':
       case 'payment_intent.amount_capturable_updated': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -175,7 +176,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           data: booking,
           error: bookingError,
         } = await supabaseAdmin
-          .from<BookingRow>('bookings')
+          .from('bookings')
           .select('id, offer_id, status, payment_intent_id')
           .eq('payment_intent_id', paymentIntentId)
           .maybeSingle();
@@ -201,7 +202,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 
           if (bookingIdFromMetadata && typeof bookingIdFromMetadata === 'string') {
             const { data: bookingById, error: bookingByIdError } = await supabaseAdmin
-              .from<BookingRow>('bookings')
+              .from('bookings')
               .select('id, offer_id, status, payment_intent_id')
               .eq('id', bookingIdFromMetadata)
               .maybeSingle();
@@ -227,7 +228,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         if (bookingToUse.status === 'pending_payment') {
           if (!bookingToUse.payment_intent_id) {
             await supabaseAdmin
-              .from<BookingRow>('bookings')
+              .from('bookings')
               .update({ payment_intent_id: paymentIntentId } as Partial<BookingRow>)
               .eq('id', bookingToUse.id);
           }
@@ -249,7 +250,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
           data: booking,
           error: bookingError,
         } = await supabaseAdmin
-          .from<BookingRow>('bookings')
+          .from('bookings')
           .select('id, offer_id, status, payment_intent_id')
           .eq('payment_intent_id', paymentIntentId)
           .maybeSingle();
@@ -299,7 +300,7 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
         break;
       }
       default: {
-        logStripeWebhook('Unhandled Stripe event type', { type: event.type });
+        logStripeWebhook('Unhandled Stripe event type', { type: eventType });
       }
     }
   } catch (err: any) {

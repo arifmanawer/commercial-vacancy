@@ -105,7 +105,7 @@ function getUserId(req: Request): string | null {
  * Landlord creates an offer in the context of a conversation + listing.
  */
 router.post<
-  unknown,
+  {},
   ApiResponse<OfferRow> | ApiResponse,
   {
     conversationId: string;
@@ -152,7 +152,7 @@ router.post<
       data: listing,
       error: listingError,
     } = await supabaseAdmin
-      .from<ListingRow>('listings')
+      .from('listings')
       .select('id, user_id, rate_type, rate_amount, min_duration, max_duration, currency')
       .eq('id', listingId)
       .maybeSingle();
@@ -213,7 +213,7 @@ router.post<
       data: participants,
       error: participantsError,
     } = await supabaseAdmin
-      .from<ConversationParticipantRow>('conversation_participants')
+      .from('conversation_participants')
       .select('conversation_id, user_id')
       .eq('conversation_id', conversationId);
 
@@ -249,7 +249,7 @@ router.post<
       data: inserted,
       error: insertError,
     } = await supabaseAdmin
-      .from<OfferRow>('offers')
+      .from('offers')
       .insert({
         conversation_id: conversationId,
         listing_id: listingId,
@@ -307,7 +307,7 @@ router.post<
       data: offer,
       error: offerError,
     } = await supabaseAdmin
-      .from<OfferRow>('offers')
+      .from('offers')
       .select(
         'id, conversation_id, listing_id, landlord_id, renter_id, rate_type, rate_amount, currency, start_date, duration, subtotal_amount, platform_fee_amount, total_amount, status, created_at, updated_at'
       )
@@ -342,7 +342,7 @@ router.post<
     }
 
     const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .select('id, status')
       .eq('offer_id', offer.id);
 
@@ -370,7 +370,7 @@ router.post<
       data: landlordProfile,
       error: landlordProfileError,
     } = await supabaseAdmin
-      .from<ProfileRow>('profiles')
+      .from('profiles')
       .select('id, email, stripe_account_id')
       .eq('id', offer.landlord_id)
       .maybeSingle();
@@ -432,7 +432,7 @@ router.post<
       data: booking,
       error: bookingError,
     } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .insert({
         offer_id: offer.id,
         listing_id: offer.listing_id,
@@ -481,7 +481,7 @@ router.post<
         data: updatedBooking,
         error: updateBookingError,
       } = await supabaseAdmin
-        .from<BookingRow>('bookings')
+        .from('bookings')
         .update({
           payment_intent_id: paymentIntent.id,
         } as Partial<BookingRow>)
@@ -519,7 +519,7 @@ router.post<
       const {
         error: markFailedError,
       } = await supabaseAdmin
-        .from<BookingRow>('bookings')
+        .from('bookings')
         .update({
           status: 'payment_failed',
         } as Partial<BookingRow>)

@@ -138,7 +138,7 @@ function calculateRefundPercentage(start: Date, now: Date): number {
  * Creates offer+booking, checks overlap, and returns Stripe Checkout URL.
  */
 router.post<
-  unknown,
+  {},
   ApiResponse<{ booking: BookingRow; checkoutUrl: string }> | ApiResponse,
   { listingId: string; startDate: string; duration: number; platformFeePercent?: number }
 >(
@@ -172,7 +172,7 @@ router.post<
       data: listing,
       error: listingError,
     } = await supabaseAdmin
-      .from<ListingRow>('listings')
+      .from('listings')
       .select('id, user_id, rate_type, rate_amount, min_duration, max_duration, currency')
       .eq('id', listingId)
       .maybeSingle();
@@ -230,7 +230,7 @@ router.post<
 
     const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
     const { data: existingBookings, error: existingError } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .select('id, start_datetime, end_datetime, status')
       .eq('listing_id', listing.id)
       .in('status', activeStatuses);
@@ -259,7 +259,7 @@ router.post<
       data: landlordProfile,
       error: landlordProfileError,
     } = await supabaseAdmin
-      .from<ProfileRow>('profiles')
+      .from('profiles')
       .select('id, stripe_account_id')
       .eq('id', listing.user_id)
       .maybeSingle();
@@ -297,7 +297,7 @@ router.post<
 
     let conversationId: string | null = null;
     const { data: existingConversations } = await supabaseAdmin
-      .from<ConversationRow>('conversations')
+      .from('conversations')
       .select('id, context_type, context_listing_id')
       .eq('context_type', 'listing')
       .eq('context_listing_id', listing.id)
@@ -306,7 +306,7 @@ router.post<
     if (existingConversations && existingConversations.length > 0) {
       const candidateIds = existingConversations.map((c) => c.id);
       const { data: participants } = await supabaseAdmin
-        .from<ConversationParticipantRow>('conversation_participants')
+        .from('conversation_participants')
         .select('conversation_id, user_id')
         .in('conversation_id', candidateIds);
       const targetPair = [userId, listing.user_id].sort();
@@ -325,7 +325,7 @@ router.post<
 
     if (!conversationId) {
       const { data: createdConversation, error: conversationError } = await supabaseAdmin
-        .from<ConversationRow>('conversations')
+        .from('conversations')
         .insert({
           created_by: userId,
           context_type: 'listing',
@@ -348,7 +348,7 @@ router.post<
       }
 
       const { error: participantError } = await supabaseAdmin
-        .from<ConversationParticipantRow>('conversation_participants')
+        .from('conversation_participants')
         .insert([
           { conversation_id: createdConversation.id, user_id: userId },
           { conversation_id: createdConversation.id, user_id: listing.user_id },
@@ -370,7 +370,7 @@ router.post<
     }
 
     const { data: insertedOffer, error: offerError } = await supabaseAdmin
-      .from<OfferRow>('offers')
+      .from('offers')
       .insert({
         conversation_id: conversationId,
         listing_id: listing.id,
@@ -395,7 +395,7 @@ router.post<
     }
 
     const { data: booking, error: bookingError } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .insert({
         offer_id: insertedOffer.id,
         listing_id: listing.id,
@@ -491,7 +491,7 @@ router.post<
 
       if (paymentIntentId) {
         const { error: bookingUpdateError } = await supabaseAdmin
-          .from<BookingRow>('bookings')
+          .from('bookings')
           .update({ payment_intent_id: paymentIntentId } as Partial<BookingRow>)
           .eq('id', booking.id);
 
@@ -528,7 +528,7 @@ router.post<
       });
     } catch (err: any) {
       await supabaseAdmin
-        .from<BookingRow>('bookings')
+        .from('bookings')
         .update({ status: 'payment_failed' } as Partial<BookingRow>)
         .eq('id', booking.id);
 
@@ -571,7 +571,7 @@ router.post<
       data: booking,
       error: bookingError,
     } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .select(
         'id, renter_id, status, start_datetime, payment_intent_id, total_amount, refund_amount, cancellation_reason, cancelled_at'
       )
@@ -631,7 +631,7 @@ router.post<
         data: updatedBooking,
         error: updateError,
       } = await supabaseAdmin
-        .from<BookingRow>('bookings')
+        .from('bookings')
         .update({
           status: 'cancelled' as BookingStatus,
           cancelled_at: now.toISOString(),
@@ -669,7 +669,7 @@ router.post<
         data: updatedBooking,
         error: updateError,
       } = await supabaseAdmin
-        .from<BookingRow>('bookings')
+        .from('bookings')
         .update({
           status: 'cancelled' as BookingStatus,
           cancelled_at: now.toISOString(),
@@ -719,7 +719,7 @@ router.post<
       data: updatedBooking,
       error: updateError,
     } = await supabaseAdmin
-      .from<BookingRow>('bookings')
+      .from('bookings')
       .update({
         status: 'refund_pending' as BookingStatus,
         cancelled_at: now.toISOString(),

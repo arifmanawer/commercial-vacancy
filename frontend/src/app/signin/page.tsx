@@ -8,15 +8,7 @@ import Footer from "../../components/Footer";
 import { supabase } from "../../lib/supabaseClient";
 import { logAuthEvent } from "../../lib/authLogger";
 
-export default function SignInPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-white" />}>
-      <SignInInner />
-    </Suspense>
-  );
-}
-
-function SignInInner() {
+function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
@@ -118,5 +110,13 @@ function SignInInner() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <React.Suspense fallback={<div className="p-8 text-center text-slate-500">Loading...</div>}>
+      <SignInContent />
+    </React.Suspense>
   );
 }

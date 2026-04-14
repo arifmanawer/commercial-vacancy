@@ -51,9 +51,9 @@ export default function AuthNav() {
       user.user_metadata?.full_name ||
       user.email ||
       "Account";
-    const initials = fullName
+    const initials = String(fullName)
       .split(/\s+/)
-      .map((s: string) => s[0])
+      .map((s: string) => s[0] || "")
       .join("")
       .slice(0, 2)
       .toUpperCase() || "?";

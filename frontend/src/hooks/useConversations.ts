@@ -41,7 +41,7 @@ export function useConversations() {
       try {
         const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
           headers: {
-            "X-User-Id": user.id,
+            "X-User-Id": user!.id,
           },
         });
 

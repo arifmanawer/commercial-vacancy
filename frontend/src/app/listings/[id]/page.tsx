@@ -17,7 +17,6 @@ import TransitInsights from "@/components/TransitInsights";
 
 type LandlordPublicInfo = {
   id: string;
-  email: string | null;
   username: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -203,7 +202,6 @@ export default function ListingPage() {
           // Cast to the fields we actually expect from `get_listing_landlord_public`.
           const landlord = data as {
             id: string;
-            email?: string | null;
             username?: string | null;
             first_name?: string | null;
             last_name?: string | null;
@@ -212,7 +210,6 @@ export default function ListingPage() {
 
           setLandlordInfo({
             id: landlord.id,
-            email: landlord.email ?? null,
             username: landlord.username ?? null,
             first_name: landlord.first_name ?? null,
             last_name: landlord.last_name ?? null,
@@ -236,7 +233,6 @@ export default function ListingPage() {
       .filter(Boolean)
       .join(" ") ||
     landlordInfo?.username ||
-    (landlordInfo?.email ? landlordInfo.email.split("@")[0] : null) ||
     "Landlord";
   const landlordProfileHref = landlordInfo?.id
     ? `/landlords/${landlordInfo.id}`
@@ -749,11 +745,6 @@ export default function ListingPage() {
                           </p>
                         ) : (
                           <>
-                            {landlordInfo?.email ? (
-                              <p className="text-xs text-slate-500 truncate">
-                                {landlordInfo.email}
-                              </p>
-                            ) : null}
                             <p className="text-xs font-medium text-[var(--brand)]">
                               View profile
                             </p>

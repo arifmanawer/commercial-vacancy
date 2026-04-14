@@ -59,6 +59,7 @@ export type Review = {
   reviewer_id: string;
   reviewer_name: string;
   reviewer_avatar: string | null;
+  reviewer_username?: string | null;
   role_context: "landlord" | "contractor" | "renter";
   rating: number;
   content: string;

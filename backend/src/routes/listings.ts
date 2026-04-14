@@ -116,5 +116,62 @@ router.get<
   })
 );
 
+interface PublicListingSummary {
+  id: string;
+  title: string | null;
+  city: string | null;
+  state: string | null;
+  property_type: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
+/**
+ * GET /api/listings?user_id=:userId
+ *
+ * Returns all Available listings owned by the given user.
+ * Used by the public landlord profile page.
+ */
+router.get<
+  Record<string, never>,
+  ApiResponse<PublicListingSummary[]> | ApiResponse
+>(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.query.user_id as string | undefined;
+
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'user_id query param is required' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('listings')
+      .select('id, title, city, state, property_type, status, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'Available')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logListingApi('GET', '/api/listings', undefined, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to load listings' });
+      return;
+    }
+
+    const listings: PublicListingSummary[] = ((data ?? []) as any[]).map((l) => ({
+      id: l.id,
+      title: l.title ?? null,
+      city: l.city ?? null,
+      state: l.state ?? null,
+      property_type: l.property_type ?? null,
+      status: l.status ?? null,
+      created_at: l.created_at ?? null,
+    }));
+
+    logListingApi('GET', '/api/listings', undefined, true);
+    res.json({ success: true, data: listings });
+  })
+);
+
 export default router;
 

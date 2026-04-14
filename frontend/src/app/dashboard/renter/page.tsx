@@ -8,6 +8,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { useConversations } from "@/hooks/useConversations";
 
+type BookingStatus =
+  | "pending_payment"
+  | "reserved"
+  | "active"
+  | "completed"
+  | "cancelled"
+  | "refund_pending"
+  | "refund_completed"
+  | "payment_failed";
+
+type BookingRow = {
+  id: string;
+  renter_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  status: BookingStatus;
+};
+
 type SavedListing = {
   id: string;
   title: string;
@@ -31,6 +49,8 @@ export default function RenterDashboardPage() {
   const [inquiriesError, setInquiriesError] = useState<string | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [upcomingBookingsCount, setUpcomingBookingsCount] = useState(0);
+  const [loadingBookingsCount, setLoadingBookingsCount] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +130,55 @@ export default function RenterDashboardPage() {
     }
 
     loadSaved();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBookingsCount() {
+      setLoadingBookingsCount(true);
+      if (!userId) {
+        setUpcomingBookingsCount(0);
+        setLoadingBookingsCount(false);
+        return;
+      }
+
+      const activeStatuses: BookingStatus[] = [
+        "pending_payment",
+        "reserved",
+        "active",
+      ];
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, renter_id, start_datetime, end_datetime, status")
+        .eq("renter_id", userId)
+        .in("status", activeStatuses);
+
+      if (cancelled) return;
+
+      if (error) {
+        // Keep dashboard functional; reservations page will show detailed errors.
+        setUpcomingBookingsCount(0);
+        setLoadingBookingsCount(false);
+        return;
+      }
+
+      const now = Date.now();
+      const rows = (data ?? []) as BookingRow[];
+      const count = rows.filter((b) => {
+        const end = new Date(b.end_datetime).getTime();
+        return Number.isFinite(end) && end >= now;
+      }).length;
+
+      setUpcomingBookingsCount(count);
+      setLoadingBookingsCount(false);
+    }
+
+    loadBookingsCount();
     return () => {
       cancelled = true;
     };
@@ -254,13 +323,23 @@ export default function RenterDashboardPage() {
                 Upcoming booking
               </p>
               <p className="text-sm font-semibold text-slate-900">
-                {inquiries.filter((i) => i.status === "accepted").length > 0
-                  ? `${inquiries.filter((i) => i.status === "accepted").length} accepted request(s)`
-                  : "No confirmed bookings"}
+                {loadingBookingsCount
+                  ? "…"
+                  : upcomingBookingsCount > 0
+                    ? `${upcomingBookingsCount} upcoming`
+                    : "No upcoming reservations"}
               </p>
               <p className="text-xs text-slate-500">
-                Once you book a space, it will appear here.
+                Bookings move to{" "}
+                <span className="font-semibold">Reserved</span> once payment is
+                confirmed.
               </p>
+              <Link
+                href="/dashboard/renter/reservations"
+                className="mt-1 inline-flex items-center text-xs font-medium text-[var(--brand)] hover:underline"
+              >
+                View reservations
+              </Link>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">

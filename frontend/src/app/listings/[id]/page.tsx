@@ -237,6 +237,9 @@ export default function ListingPage() {
   const landlordProfileHref = landlordInfo?.id
     ? `/landlords/${landlordInfo.id}`
     : null;
+  const isOwnListing = Boolean(
+    user?.id && listing?.landlord_user_id && user.id === listing.landlord_user_id,
+  );
 
   useEffect(() => {
     if (!mapsLoaded || !listing) return;
@@ -326,6 +329,10 @@ export default function ListingPage() {
   async function startMessageThread() {
     if (!listing || !id) return;
     if (!ensureAuthenticated("message") || !user) return;
+    if (listing.landlord_user_id === user.id) {
+      setError("You cannot message yourself about your own listing.");
+      return;
+    }
 
     try {
       setFeedback(null);
@@ -615,17 +622,22 @@ export default function ListingPage() {
 
                 <div className="space-y-4">
                   <button
-                    className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
+                    className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                     onClick={() => {
                       startMessageThread();
                     }}
                     disabled={
                       submitting === "tour" ||
                       startingConversation ||
+                      isOwnListing ||
                       !listing.landlord_user_id
                     }
                   >
-                    {startingConversation ? "Opening chat..." : "Contact Landlord"}
+                    {isOwnListing
+                      ? "This is your listing"
+                      : startingConversation
+                        ? "Opening chat..."
+                        : "Contact Landlord"}
                   </button>
                   <button
                     className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"

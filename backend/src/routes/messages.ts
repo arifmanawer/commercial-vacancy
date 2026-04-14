@@ -295,19 +295,27 @@ router.post<
       return;
     }
 
-    if (!Array.isArray(participantIds) || participantIds.length < 2) {
+    if (!Array.isArray(participantIds) || participantIds.length < 1) {
       res.status(400).json({
         success: false,
-        error: 'participantIds must contain at least two user IDs',
+        error: 'participantIds must contain at least one other user ID',
       });
       return;
     }
 
-    if (!participantIds.includes(userId)) {
-      participantIds.push(userId);
-    }
+    const normalizedParticipants = participantIds
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const participantSet = Array.from(new Set([...normalizedParticipants, userId])).sort();
 
-    const participantSet = Array.from(new Set(participantIds)).sort();
+    if (participantSet.length < 2) {
+      res.status(400).json({
+        success: false,
+        error: 'You cannot start a conversation with only yourself',
+      });
+      return;
+    }
 
     let convQuery = supabaseAdmin
       .from('conversations')

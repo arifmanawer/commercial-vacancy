@@ -19,7 +19,7 @@ interface ConversationResponse {
 
 export function useConversation(conversationId: string | null) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +30,7 @@ export function useConversation(conversationId: string | null) {
     if (!user || !conversationId) {
       setConversation(null);
       setMessages([]);
+      setLoading(false);
       return;
     }
 

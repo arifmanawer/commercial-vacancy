@@ -33,7 +33,7 @@ services:
       - .env
     environment:
       - PORT=3000
-      - NEXT_PUBLIC_API_URL=http://localhost:5001
+      # - NEXT_PUBLIC_API_URL=http://localhost:5001
     volumes:
       # Avoid bind-mounting the entire app directory into /app.
       # Some Docker Desktop filesystem setups can cause sporadic read failures

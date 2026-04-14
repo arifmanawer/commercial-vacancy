@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse, PaginatedResponse } from '../types';
@@ -94,7 +95,7 @@ async function requireContractorRole(userId: string, res: Response): Promise<boo
  * Requires profiles.is_contractor = true.
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ContractorApiModel | undefined> | ApiResponse
 >(
   '/me',
@@ -116,7 +117,7 @@ router.get<
       data,
       error,
     } = await supabaseAdmin
-      .from<ContractorRow>('contractors')
+      .from('contractors')
       .select(
         'id, user_id, business_name, profile_picture_url, services, hourly_rate, service_radius, rating, total_jobs_completed, is_verified, availability_status, available_days'
       )
@@ -143,12 +144,58 @@ router.get<
 );
 
 /**
+ * GET /api/contractors/:id
+ *
+ * Returns a public contractor profile by contractor record ID.
+ * This endpoint is used by profile pages and does not require auth.
+ */
+router.get<
+  { id: string },
+  ApiResponse<ContractorApiModel> | ApiResponse
+>(
+  '/:id',
+  asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+    const { id } = req.params;
+
+    if (!id) {
+      logContractorApi('GET', '/api/contractors/:id', undefined, false, 'Missing contractor id');
+      res.status(400).json({ success: false, error: 'Missing contractor id' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('contractors')
+      .select(
+        'id, user_id, business_name, profile_picture_url, services, hourly_rate, service_radius, rating, total_jobs_completed, is_verified, availability_status, available_days'
+      )
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      logContractorApi('GET', '/api/contractors/:id', undefined, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to fetch contractor profile' });
+      return;
+    }
+
+    if (!data) {
+      logContractorApi('GET', '/api/contractors/:id', undefined, false, 'Not found');
+      res.status(404).json({ success: false, error: 'Contractor not found' });
+      return;
+    }
+
+    const contractor = mapRowToApiModel(data);
+    logContractorApi('GET', '/api/contractors/:id', undefined, true);
+    res.json({ success: true, data: contractor });
+  })
+);
+
+/**
  * POST /api/contractors/me
  *
  * Create or update the contractor profile for the authenticated user.
  */
 router.post<
-  unknown,
+  ParamsDictionary,
   ApiResponse<ContractorApiModel> | ApiResponse,
   {
     business_name?: string;
@@ -234,7 +281,7 @@ router.post<
       data,
       error,
     } = await supabaseAdmin
-      .from<ContractorRow>('contractors')
+      .from('contractors')
       .upsert(upsertPayload, {
         onConflict: 'user_id',
       })
@@ -271,7 +318,7 @@ router.post<
  * - Requires authenticated user with landlord role (profiles.is_landlord = true)
  */
 router.get<
-  unknown,
+  ParamsDictionary,
   PaginatedResponse<ContractorApiModel> | ApiResponse
 >(
   '/',

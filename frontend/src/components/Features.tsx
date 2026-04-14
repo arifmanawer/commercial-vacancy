@@ -1,16 +1,16 @@
 export default function Features() {
   const items = [
     {
-      title: "Verified Listings",
-      desc: "All listings are vetted to ensure reliability and accurate descriptions.",
+      title: "NYC Data Insights",
+      desc: "Every listing is enriched with real vacancy, zoning, and transit data from NYC Open Data.",
     },
     {
-      title: "Instant Booking",
-      desc: "Quickly reserve spaces with clear availability and pricing.",
+      title: "Multi-Role Platform",
+      desc: "Renters browse and inquire, landlords list and manage, contractors offer services — all in one place.",
     },
     {
       title: "Direct Communication",
-      desc: "Message hosts directly to coordinate details and requests.",
+      desc: "Message landlords and contractors directly to coordinate details and requests.",
     },
   ];
 

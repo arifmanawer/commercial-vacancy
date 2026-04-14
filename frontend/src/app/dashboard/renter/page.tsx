@@ -305,12 +305,9 @@ export default function RenterDashboardPage() {
                 View the status of your contact and tour requests.
               </p>
             </div>
-            <button
-              type="button"
-              className="hidden sm:inline-flex items-center rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-            >
-              View all
-            </button>
+            <span className="hidden sm:inline-flex items-center text-xs text-slate-400">
+              {inquiries.length > 0 ? `${inquiries.length} total` : ""}
+            </span>
           </div>
 
           {loadingInquiries ? (

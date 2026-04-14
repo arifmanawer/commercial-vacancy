@@ -11,6 +11,9 @@ import { getApiUrl } from "@/lib/api";
 import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
 import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
+import VacancyInsights from "@/components/VacancyInsights";
+import ZoningInsights from "@/components/ZoningInsights";
+import TransitInsights from "@/components/TransitInsights";
 
 type LandlordPublicInfo = {
   id: string;
@@ -34,6 +37,7 @@ type ListingDetails = {
   security_deposit: number | null;
   min_duration: number | null;
   max_duration: number | null;
+  zip_code: string | null;
   images: string[];
   landlord_user_id: string | null;
 };
@@ -114,7 +118,7 @@ export default function ListingPage() {
         const { data: listingRow, error: listingError } = await supabase
           .from("listings")
           .select(
-            "id, title, description, address, city, state, property_type, user_id, rate_type, rate_amount, min_duration, max_duration",
+            "id, title, description, address, city, state, zip_code, property_type, user_id, rate_type, rate_amount, min_duration, max_duration",
           )
           .eq("id", id)
           .maybeSingle();
@@ -179,6 +183,7 @@ export default function ListingPage() {
             security_deposit: null,
             min_duration: listingRow.min_duration ?? null,
             max_duration: listingRow.max_duration ?? null,
+            zip_code: listingRow.zip_code ?? null,
             images,
             landlord_user_id:
               typeof listingRow.user_id === "string"
@@ -285,6 +290,9 @@ export default function ListingPage() {
     landlordInfo?.username ||
     (landlordInfo?.email ? landlordInfo.email.split("@")[0] : null) ||
     "Landlord";
+  const landlordProfileHref = landlordInfo?.id
+    ? `/landlords/${landlordInfo.id}`
+    : null;
 
   useEffect(() => {
     if (!mapsLoaded || !listing) return;
@@ -747,6 +755,17 @@ export default function ListingPage() {
                 )}
               </div>
             </section>
+
+            {/* NYC Open Data Insights */}
+            {listing.zip_code && (
+              <>
+                <VacancyInsights zipCode={listing.zip_code} />
+                <ZoningInsights zipCode={listing.zip_code} />
+              </>
+            )}
+            {mapCenter && (
+              <TransitInsights lat={mapCenter.lat} lng={mapCenter.lng} />
+            )}
           </div>
 
           {/* RIGHT COLUMN - Sticky Sidebar */}
@@ -899,16 +918,59 @@ export default function ListingPage() {
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-3">
                     Listed by
                   </p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {landlordInfo?.profile_picture_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={landlordInfo.profile_picture_url}
-                          alt={landlordDisplayName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
+                  {landlordProfileHref ? (
+                    <Link
+                      href={landlordProfileHref}
+                      className="group flex items-center gap-3 rounded-lg px-2 py-1.5 -mx-2 hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                        {landlordInfo?.profile_picture_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={landlordInfo.profile_picture_url}
+                            alt={landlordDisplayName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-600">
+                            {landlordDisplayName
+                              .split(" ")
+                              .map((p) => p[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex flex-col gap-0.5">
+                        <p className="text-sm font-medium text-slate-900 group-hover:text-slate-950">
+                          {landlordLoading ? "Loading…" : landlordDisplayName}
+                        </p>
+                        {landlordLoading ? (
+                          <p className="text-xs text-slate-500">
+                            Loading contact details…
+                          </p>
+                        ) : landlordError ? (
+                          <p className="text-xs text-slate-500">
+                            Contact details unavailable
+                          </p>
+                        ) : (
+                          <>
+                            {landlordInfo?.email ? (
+                              <p className="text-xs text-slate-500 truncate">
+                                {landlordInfo.email}
+                              </p>
+                            ) : null}
+                            <p className="text-xs font-medium text-[var(--brand)]">
+                              View profile
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-semibold text-slate-600">
                           {landlordDisplayName
                             .split(" ")
@@ -917,23 +979,21 @@ export default function ListingPage() {
                             .slice(0, 2)
                             .toUpperCase()}
                         </span>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {landlordLoading ? "Loading…" : landlordDisplayName}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {landlordLoading
-                          ? "Loading contact details…"
-                          : landlordError
-                            ? "Contact details unavailable"
-                            : landlordInfo?.email
-                              ? landlordInfo.email
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">
+                          {landlordLoading ? "Loading…" : landlordDisplayName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {landlordLoading
+                            ? "Loading contact details…"
+                            : landlordError
+                              ? "Contact details unavailable"
                               : "Messages you send here go directly to this landlord."}
-                      </p>
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

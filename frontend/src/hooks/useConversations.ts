@@ -22,7 +22,7 @@ export interface ConversationSummary {
 
 export function useConversations() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
 
@@ -30,6 +30,7 @@ export function useConversations() {
     let cancelled = false;
     if (!user) {
       setConversations([]);
+      setLoading(false);
       return;
     }
 

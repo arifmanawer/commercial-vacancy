@@ -26,54 +26,102 @@ export function useConversations() {
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  async function loadConversations(cancelled = false) {
     if (!user) {
       setConversations([]);
       setLoading(false);
       return;
     }
 
-    async function load() {
-      if (!user) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
-          headers: {
-            "X-User-Id": user!.id,
-          },
-        });
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
+        headers: {
+          "X-User-Id": user.id,
+        },
+      });
 
-        const json = (await res.json().catch(() => null)) as
-          | { success?: boolean; data?: ConversationSummary[]; error?: string }
-          | null;
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: ConversationSummary[]; error?: string }
+        | null;
 
-        if (!res.ok || !json?.success) {
-          if (!cancelled) {
-            setError(json?.error || "Failed to load conversations");
-          }
-          return;
+      if (!res.ok || !json?.success) {
+        if (!cancelled) {
+          setError(json?.error || "Failed to load conversations");
         }
+        return;
+      }
 
-        if (!cancelled) {
-          setConversations(json.data || []);
-        }
-      } catch (_err) {
-        if (!cancelled) {
-          setError("Failed to load conversations");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      if (!cancelled) {
+        setConversations(json.data || []);
+      }
+    } catch (_err) {
+      if (!cancelled) {
+        setError("Failed to load conversations");
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
       }
     }
+  }
 
-    load();
+  async function refresh() {
+    await loadConversations(false);
+  }
+
+  async function markAllAsRead() {
+    if (!user) return;
+    const unreadConversationIds = conversations
+      .filter((c) => c.unread_count > 0)
+      .map((c) => c.id);
+    if (unreadConversationIds.length === 0) return;
+
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.unread_count > 0
+          ? {
+              ...conv,
+              unread_count: 0,
+            }
+          : conv
+      )
+    );
+
+    const results = await Promise.allSettled(
+      unreadConversationIds.map((conversationId) =>
+        fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}/read`, {
+          method: "POST",
+          headers: {
+            "X-User-Id": user.id,
+          },
+        })
+      )
+    );
+
+    const hasFailure = results.some(
+      (result) => result.status === "rejected" || (result.status === "fulfilled" && !result.value.ok)
+    );
+
+    if (hasFailure) {
+      setError("Some conversations could not be marked as read. Retrying list sync...");
+      await refresh();
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    loadConversations(cancelled);
+
+    const refreshOnFocus = () => {
+      loadConversations(false);
+    };
+    window.addEventListener("focus", refreshOnFocus);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", refreshOnFocus);
     };
   }, [user]);
 
@@ -82,6 +130,6 @@ export function useConversations() {
     0
   );
 
-  return { conversations, loading, error, totalUnread };
+  return { conversations, loading, error, totalUnread, refresh, markAllAsRead };
 }
 

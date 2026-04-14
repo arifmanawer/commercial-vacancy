@@ -25,7 +25,8 @@ function formatRelativeTime(iso: string | null): string {
 export default function MessagesPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { conversations, loading, error } = useConversations();
+  const { conversations, loading, error, totalUnread, markAllAsRead } = useConversations();
+  const hasUnread = totalUnread > 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -56,6 +57,31 @@ export default function MessagesPage() {
 
         {user && (
           <section className="mt-10 space-y-4" aria-label="Message conversations">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-white px-4 py-3">
+              <p className="text-sm text-slate-600">
+                {hasUnread ? (
+                  <>
+                    You have{" "}
+                    <span className="font-semibold text-slate-900">
+                      {totalUnread} unread {totalUnread === 1 ? "message" : "messages"}
+                    </span>
+                    .
+                  </>
+                ) : (
+                  "All caught up."
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  markAllAsRead();
+                }}
+                disabled={!hasUnread}
+                className="text-xs font-medium text-[var(--brand)] hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed"
+              >
+                Mark all read
+              </button>
+            </div>
             {loading && (
               <div className="text-slate-500 text-sm">Loading conversations…</div>
             )}

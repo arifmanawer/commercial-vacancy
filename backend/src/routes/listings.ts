@@ -12,7 +12,6 @@ interface ListingRow {
 
 interface LandlordPublicInfo {
   id: string;
-  email: string | null;
   is_landlord: boolean;
   created_at: string | null;
   username: string | null;
@@ -38,7 +37,7 @@ function logListingApi(
 /**
  * GET /api/listings/:id/landlord
  *
- * Returns minimal public landlord info (email and role flags) for a given listing.
+ * Returns minimal public landlord info (no email) for a given listing.
  * Uses the Supabase service role and does not require authentication.
  */
 router.get<
@@ -83,7 +82,7 @@ router.get<
       error: profileError,
     } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, is_landlord, created_at, username, first_name, last_name, description, profile_picture_url')
+      .select('id, is_landlord, created_at, username, first_name, last_name, description, profile_picture_url')
       .eq('id', listing.user_id)
       .maybeSingle();
 
@@ -101,7 +100,6 @@ router.get<
 
     const payload: LandlordPublicInfo = {
       id: profile.id as string,
-      email: (profile as any).email ?? null,
       is_landlord: (profile as any).is_landlord ?? false,
       created_at: (profile as any).created_at ?? null,
       username: (profile as any).username ?? null,

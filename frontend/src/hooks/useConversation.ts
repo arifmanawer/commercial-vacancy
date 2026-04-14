@@ -62,6 +62,25 @@ export function useConversation(conversationId: string | null) {
           setConversation(json.data.conversation);
           setMessages(json.data.messages);
         }
+
+        if (json.data.conversation.unread_count > 0) {
+          await fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}/read`, {
+            method: "POST",
+            headers: {
+              "X-User-Id": user.id,
+            },
+          });
+          if (!cancelled) {
+            setConversation((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    unread_count: 0,
+                  }
+                : prev
+            );
+          }
+        }
       } catch (_err) {
         if (!cancelled) {
           setError("Failed to load conversation");

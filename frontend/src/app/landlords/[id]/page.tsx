@@ -20,7 +20,6 @@ type PublicListingSummary = {
 type LandlordPublicProfile = {
   id: string;
   name: string;
-  email: string | null;
   profile_picture_url: string | null;
   message_enabled: boolean;
   current_listings: PublicListingSummary[];
@@ -227,11 +226,6 @@ export default function LandlordPublicProfilePage() {
               <h1 className="mt-1 text-3xl font-bold text-slate-900 tracking-tight">
                 {profile.name}
               </h1>
-              {profile.email && (
-                <p className="mt-2 text-sm text-slate-600 break-all">
-                  {profile.email}
-                </p>
-              )}
             </div>
           </div>
         </section>

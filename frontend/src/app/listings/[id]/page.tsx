@@ -17,7 +17,6 @@ import TransitInsights from "@/components/TransitInsights";
 
 type LandlordPublicInfo = {
   id: string;
-  email: string | null;
   username: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -203,7 +202,6 @@ export default function ListingPage() {
           // Cast to the fields we actually expect from `get_listing_landlord_public`.
           const landlord = data as {
             id: string;
-            email?: string | null;
             username?: string | null;
             first_name?: string | null;
             last_name?: string | null;
@@ -212,7 +210,6 @@ export default function ListingPage() {
 
           setLandlordInfo({
             id: landlord.id,
-            email: landlord.email ?? null,
             username: landlord.username ?? null,
             first_name: landlord.first_name ?? null,
             last_name: landlord.last_name ?? null,
@@ -236,11 +233,13 @@ export default function ListingPage() {
       .filter(Boolean)
       .join(" ") ||
     landlordInfo?.username ||
-    (landlordInfo?.email ? landlordInfo.email.split("@")[0] : null) ||
     "Landlord";
   const landlordProfileHref = landlordInfo?.id
     ? `/landlords/${landlordInfo.id}`
     : null;
+  const isOwnListing = Boolean(
+    user?.id && listing?.landlord_user_id && user.id === listing.landlord_user_id,
+  );
 
   useEffect(() => {
     if (!mapsLoaded || !listing) return;
@@ -330,6 +329,10 @@ export default function ListingPage() {
   async function startMessageThread() {
     if (!listing || !id) return;
     if (!ensureAuthenticated("message") || !user) return;
+    if (listing.landlord_user_id === user.id) {
+      setError("You cannot message yourself about your own listing.");
+      return;
+    }
 
     try {
       setFeedback(null);
@@ -619,17 +622,22 @@ export default function ListingPage() {
 
                 <div className="space-y-4">
                   <button
-                    className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm"
+                    className="w-full bg-slate-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                     onClick={() => {
                       startMessageThread();
                     }}
                     disabled={
                       submitting === "tour" ||
                       startingConversation ||
+                      isOwnListing ||
                       !listing.landlord_user_id
                     }
                   >
-                    {startingConversation ? "Opening chat..." : "Contact Landlord"}
+                    {isOwnListing
+                      ? "This is your listing"
+                      : startingConversation
+                        ? "Opening chat..."
+                        : "Contact Landlord"}
                   </button>
                   <button
                     className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
@@ -749,11 +757,6 @@ export default function ListingPage() {
                           </p>
                         ) : (
                           <>
-                            {landlordInfo?.email ? (
-                              <p className="text-xs text-slate-500 truncate">
-                                {landlordInfo.email}
-                              </p>
-                            ) : null}
                             <p className="text-xs font-medium text-[var(--brand)]">
                               View profile
                             </p>

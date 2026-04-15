@@ -103,8 +103,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } finally {
+      // Always clear local state — onAuthStateChange can lag or miss a tick with cookie/session sync
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+    }
   };
 
   const isLandlord = profile?.is_landlord ?? false;

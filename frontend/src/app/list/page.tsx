@@ -32,7 +32,7 @@ export default function ListPage() {
 
   async function handleCreateListing(data: ListingFormInput) {
     if (!user) {
-      alert("You must be signed in to create a listing.");
+      toast("You must be signed in to create a listing.", "error");
       return;
     }
 
@@ -114,7 +114,7 @@ export default function ListPage() {
       router.push("/browse");
     } catch (err: any) {
       console.error(err);
-      alert(err?.message ?? "Failed to create listing");
+      toast(err?.message ?? "Failed to create listing", "error");
     } finally {
       setSubmitting(false);
     }

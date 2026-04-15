@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ProfileReviews from "@/components/ProfileReviews";
 import { getApiUrl } from "@/lib/api";
 import type { Contractor, ContractorAvailabilityStatus } from "@/types/database";
 
@@ -207,64 +208,7 @@ export default function ContractorProfilePage() {
             </div>
           </section>
 
-          <section
-            aria-labelledby="reviews-heading"
-            className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8 space-y-4"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-              <div>
-                <h2
-                  id="reviews-heading"
-                  className="text-lg font-semibold text-slate-900"
-                >
-                  Reviews
-                </h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Feedback from landlords after completed work. This section is a
-                  placeholder until reviews are stored and loaded from the backend.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-slate-700">
-                No reviews to show yet
-              </p>
-              <p className="text-xs text-slate-500 mt-2 max-w-md mx-auto">
-                Example entries will list the reviewer, star rating, date, and
-                comment once the feature is wired up.
-              </p>
-            </div>
-
-            <ul className="space-y-3" aria-hidden="true">
-              {[1, 2, 3].map((i) => (
-                <li
-                  key={i}
-                  className="rounded-lg border border-slate-100 bg-slate-50/50 p-4 space-y-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-slate-200/80" />
-                    <div className="space-y-1 flex-1">
-                      <div className="h-3 w-28 rounded bg-slate-200/80" />
-                      <div className="h-2 w-20 rounded bg-slate-100" />
-                    </div>
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <span key={j} className="text-slate-200 text-xs">
-                          ★
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-2 w-full rounded bg-slate-100" />
-                  <div className="h-2 w-[80%] rounded bg-slate-100" />
-                </li>
-              ))}
-            </ul>
-            <p className="text-[11px] text-slate-400 text-center">
-              Placeholder layout only — not real data.
-            </p>
-          </section>
+          <ProfileReviews targetUserId={contractor.user_id} />
           </>
         )}
       </main>

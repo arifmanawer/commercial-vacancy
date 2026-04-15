@@ -26,25 +26,34 @@ export default function HowItWorksPage() {
           aria-label="Roles"
         >
           <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-lg mb-3">🔍</div>
             <h2 className="text-lg font-semibold text-slate-900">Renters</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Search and browse available spaces, submit maintenance requests
-              for your rental, and track their status.
-            </p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>Browse and search available commercial spaces</li>
+              <li>Save listings and request tours or contact landlords</li>
+              <li>View neighborhood data — vacancy rates, zoning, and transit</li>
+              <li>Message landlords directly through the platform</li>
+            </ul>
           </div>
           <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-lg mb-3">🏢</div>
             <h2 className="text-lg font-semibold text-slate-900">Landlords</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              List your properties, view maintenance requests from renters, and
-              assign jobs to contractors.
-            </p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>List properties with photos, pricing, and details</li>
+              <li>Review and respond to tour and contact requests</li>
+              <li>Search for contractors and request maintenance jobs</li>
+              <li>Track job status and communicate with all parties</li>
+            </ul>
           </div>
           <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-lg mb-3">🔧</div>
             <h2 className="text-lg font-semibold text-slate-900">Contractors</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Manage your profile, view assigned jobs, and update progress and
-              completion status.
-            </p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>Create a profile with services, rates, and availability</li>
+              <li>Receive job requests from landlords</li>
+              <li>Accept, decline, or mark jobs as completed</li>
+              <li>Build reputation through reviews from landlords</li>
+            </ul>
           </div>
         </section>
       </main>

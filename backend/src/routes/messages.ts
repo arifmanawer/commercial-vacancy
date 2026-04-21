@@ -3,6 +3,7 @@ import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
+import { computeOfferActionability } from '../lib/offerActionability';
 
 const router = Router();
 
@@ -64,6 +65,14 @@ interface MessageApiModel {
   sender_id: string;
   body: string;
   created_at: string;
+}
+
+interface OfferActionabilityModel {
+  canAccept: boolean;
+  canReject: boolean;
+  canCounter: boolean;
+  canWithdraw: boolean;
+  reasonIfDisabled: string | null;
 }
 
 function logMessagesApi(
@@ -527,7 +536,8 @@ router.get<
   ApiResponse<{
     conversation: ConversationSummary;
     messages: MessageApiModel[];
-    latestOffer?: any;
+    latestOffer?: Record<string, unknown> | null;
+    offerActionability?: OfferActionabilityModel;
   }> | ApiResponse
 >(
   '/conversations/:id',
@@ -681,18 +691,45 @@ router.get<
         created_at: m.created_at,
       }));
 
-    const { data: offersForConversation } = await supabaseAdmin
+    const offerSelectNegotiation =
+      'id, conversation_id, listing_id, landlord_id, renter_id, parent_offer_id, created_by, rate_type, rate_amount, currency, start_date, duration, subtotal_amount, platform_fee_amount, total_amount, status, notes, created_at, updated_at';
+
+    const { data: pendingOffers } = await supabaseAdmin
       .from('offers')
-      .select(
-        'id, conversation_id, listing_id, landlord_id, renter_id, rate_type, rate_amount, currency, start_date, duration, subtotal_amount, platform_fee_amount, total_amount, status, created_at'
-      )
+      .select(offerSelectNegotiation)
       .eq('conversation_id', id)
+      .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(1);
 
-    const latestOffer = offersForConversation && offersForConversation.length > 0
-      ? offersForConversation[0]
-      : null;
+    const pending = pendingOffers?.[0] ?? null;
+
+    let latestOffer: Record<string, unknown> | null = pending;
+    if (!latestOffer) {
+      const { data: anyOffers } = await supabaseAdmin
+        .from('offers')
+        .select(offerSelectNegotiation)
+        .eq('conversation_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      latestOffer = anyOffers?.[0] ?? null;
+    }
+
+    const offerActionability = computeOfferActionability(
+      pending &&
+        typeof pending.created_by === 'string' &&
+        typeof pending.landlord_id === 'string' &&
+        typeof pending.renter_id === 'string' &&
+        typeof pending.status === 'string'
+        ? {
+            status: pending.status as 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled' | 'countered',
+            created_by: pending.created_by,
+            landlord_id: pending.landlord_id,
+            renter_id: pending.renter_id,
+          }
+        : null,
+      userId
+    );
 
     logMessagesApi('GET', '/api/messages/conversations/:id', userId, true);
     res.json({
@@ -701,6 +738,7 @@ router.get<
         conversation: summary,
         messages: apiMessages,
         latestOffer,
+        offerActionability,
       },
     });
   })

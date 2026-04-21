@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, type MouseEvent } from "react";
+import { useRef, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,7 +11,7 @@ export default function AuthNav() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleSignOut = async (e: MouseEvent<HTMLButtonElement>) => {
+  const handleSignOut = async (e: ReactMouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setOpen(false);
@@ -22,7 +22,7 @@ export default function AuthNav() {
 
   useEffect(() => {
     if (!open) return;
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: Event) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpen(false);
       }

@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 
+type BookingStatus = "pending_payment" | "reserved" | "active";
+
 export default function LandlordDashboardPage() {
   const { user } = useAuth();
   const [listings, setListings] = useState<any[]>([]);
@@ -26,6 +28,8 @@ export default function LandlordDashboardPage() {
   const [contractorJobs, setContractorJobs] = useState<any[]>([]);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [upcomingReservationsCount, setUpcomingReservationsCount] = useState(0);
+  const [loadingReservationsCount, setLoadingReservationsCount] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -114,6 +118,55 @@ export default function LandlordDashboardPage() {
 
     loadData();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadReservationsCount() {
+      setLoadingReservationsCount(true);
+
+      const userId = user?.id;
+      if (!userId) {
+        setUpcomingReservationsCount(0);
+        setLoadingReservationsCount(false);
+        return;
+      }
+
+      const activeStatuses: BookingStatus[] = [
+        "pending_payment",
+        "reserved",
+        "active",
+      ];
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, end_datetime, status")
+        .eq("landlord_id", userId)
+        .in("status", activeStatuses);
+
+      if (cancelled) return;
+
+      if (error) {
+        setUpcomingReservationsCount(0);
+        setLoadingReservationsCount(false);
+        return;
+      }
+
+      const now = Date.now();
+      const count = (data ?? []).filter((b: any) => {
+        const end = new Date(b.end_datetime).getTime();
+        return Number.isFinite(end) && end >= now;
+      }).length;
+
+      setUpcomingReservationsCount(count);
+      setLoadingReservationsCount(false);
+    }
+
+    loadReservationsCount();
     return () => {
       cancelled = true;
     };
@@ -231,18 +284,24 @@ export default function LandlordDashboardPage() {
 
             <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Contractor jobs
+                Reservations
               </p>
               <p className="text-2xl font-bold text-slate-900">
-                {loading || loadingJobs ? (
+                {loadingReservationsCount ? (
                   <span className="inline-block h-7 w-8 rounded bg-slate-100 animate-pulse" />
                 ) : (
-                  contractorJobs.length
+                  upcomingReservationsCount
                 )}
               </p>
               <p className="text-xs text-slate-500">
-                Track requests, accepted work, and completed jobs.
+                Upcoming bookings across your listings.
               </p>
+              <Link
+                href="/dashboard/landlord/reservations"
+                className="mt-1 inline-flex items-center text-xs font-medium text-[var(--brand)] hover:underline"
+              >
+                Manage reservations
+              </Link>
             </div>
           </div>
         </section>

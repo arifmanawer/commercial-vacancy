@@ -43,6 +43,7 @@ export default function ProfilePage() {
   const [description, setDescription] = useState("");
   const [profilePictureUrl, setProfilePictureUrl] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [connectingStripe, setConnectingStripe] = useState(false);
 
   useEffect(() => {
     if (!success) return;
@@ -209,6 +210,45 @@ export default function ProfilePage() {
       setError(msg);
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleConnectStripe = async () => {
+    if (!user?.id) return;
+    setConnectingStripe(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/stripe/connect/onboarding`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: { onboarding_url: string }; error?: string }
+        | null;
+
+      if (!res.ok || !data?.success || !data.data?.onboarding_url) {
+        throw new Error(
+          data?.error ||
+            "Could not start Stripe onboarding. Please try again in a moment.",
+        );
+      }
+
+      window.location.href = data.data.onboarding_url;
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message === "Failed to fetch"
+            ? "Could not connect to the API. Make sure the backend is running (npm run dev in backend/)."
+            : err.message
+          : "Failed to start Stripe onboarding.";
+      setError(msg);
+    } finally {
+      setConnectingStripe(false);
     }
   };
 
@@ -520,6 +560,27 @@ export default function ProfilePage() {
               </label>
             </div>
           </div>
+
+          {isLandlord && (
+            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-amber-900">
+                Set up payouts with Stripe
+              </p>
+              <p className="text-xs text-amber-800">
+                To receive booking payouts for your listings, connect a Stripe
+                account. You&apos;ll be redirected to Stripe to complete a short
+                onboarding flow and can return here when you&apos;re done.
+              </p>
+              <button
+                type="button"
+                onClick={handleConnectStripe}
+                disabled={connectingStripe}
+                className="inline-flex items-center rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:opacity-60"
+              >
+                {connectingStripe ? "Opening Stripe..." : "Connect payouts (Stripe)"}
+              </button>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-3">
             {isLandlord && (

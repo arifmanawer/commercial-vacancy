@@ -56,14 +56,8 @@ type ListingRow = {
   city: string | null;
   state: string | null;
   property_type: string | null;
-};
-
-type PricingRow = {
-  id: string;
   rate_amount: number | null;
   rate_type: string | null;
-  min_duration: number | null;
-  max_duration: number | null;
 };
 
 type ImageRow = {
@@ -152,74 +146,18 @@ export default function BrowsePage() {
     async function loadListings() {
       setLoadingListings(true);
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8ebdf7',
-          },
-          body: JSON.stringify({
-            sessionId: '8ebdf7',
-            runId: 'pre-fix-1',
-            hypothesisId: 'H1',
-            location: 'frontend/src/app/browse/page.tsx:loadListings:entry',
-            message: 'Entering loadListings',
-            data: {},
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
-
         const { data: listingRows, error: listingsError } = await supabase
           .from("listings")
-          .select("id, title, address, city, state, property_type")
+          .select("id, title, address, city, state, property_type, rate_amount, rate_type")
           .order("created_at", { ascending: false });
 
         if (listingsError) {
           console.error("Failed to load listings", listingsError);
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Debug-Session-Id': '8ebdf7',
-            },
-            body: JSON.stringify({
-              sessionId: '8ebdf7',
-              runId: 'pre-fix-1',
-              hypothesisId: 'H1',
-              location: 'frontend/src/app/browse/page.tsx:loadListings:error',
-              message: 'Listings query failed',
-              data: { message: listingsError.message, details: listingsError.details },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion agent log
           if (mounted) {
             setListings([]);
           }
           return;
         }
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8ebdf7',
-          },
-          body: JSON.stringify({
-            sessionId: '8ebdf7',
-            runId: 'pre-fix-1',
-            hypothesisId: 'H2',
-            location: 'frontend/src/app/browse/page.tsx:loadListings:afterQuery',
-            message: 'Listings query succeeded',
-            data: { rowCount: listingRows ? listingRows.length : null },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
 
         if (!listingRows || listingRows.length === 0) {
           setListings([]);
@@ -248,8 +186,8 @@ export default function BrowsePage() {
             city: r.city,
             state: r.state,
             property_type: r.property_type,
-            rate_amount: null,
-            rate_type: null,
+            rate_amount: r.rate_amount ?? null,
+            rate_type: r.rate_type ?? null,
             image: imgMap.get(r.id)?.image_url?.[0] ?? null,
           };
         });
@@ -257,24 +195,6 @@ export default function BrowsePage() {
         if (mounted) setListings(view);
       } catch (err) {
         console.error(err);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8ebdf7',
-          },
-          body: JSON.stringify({
-            sessionId: '8ebdf7',
-            runId: 'pre-fix-1',
-            hypothesisId: 'H3',
-            location: 'frontend/src/app/browse/page.tsx:loadListings:catch',
-            message: 'Unexpected error in loadListings',
-            data: { errorMessage: err instanceof Error ? err.message : String(err) },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
       } finally {
         setLoadingListings(false);
       }

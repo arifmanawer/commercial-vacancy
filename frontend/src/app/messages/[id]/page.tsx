@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { useConversation } from "@/hooks/useConversation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 export default function ConversationPage() {
   const params = useParams<{ id: string }>();
@@ -17,6 +18,7 @@ export default function ConversationPage() {
     useConversation(id ?? null);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const { toast } = useToast();
   const [creatingOffer, setCreatingOffer] = useState(false);
   const [offerStart, setOfferStart] = useState("");
   const [offerDuration, setOfferDuration] = useState("");
@@ -85,7 +87,7 @@ export default function ConversationPage() {
       );
     } catch (_err) {
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")));
-      alert("Failed to send message. Please try again.");
+      toast("Failed to send message. Please try again.", "error");
     } finally {
       setSending(false);
     }

@@ -9,6 +9,7 @@ import {
 } from "@react-google-maps/api";
 import { supabase } from "@/lib/supabaseClient";
 import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
+import { useToast } from "@/components/Toast";
 
 const DEFAULT_CENTER: google.maps.LatLngLiteral = {
   lat: 40.7128,
@@ -93,6 +94,7 @@ type MapViewProps = {
 };
 
 export default function MapView({ onNearbyChange }: MapViewProps) {
+  const { toast } = useToast();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [center, setCenter] = useState<google.maps.LatLngLiteral>(DEFAULT_CENTER);
   const [searchLocation, setSearchLocation] =
@@ -210,9 +212,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
     const place = autocomplete.getPlace();
 
     if (!place.geometry || !place.geometry.location) {
-      window.alert(
-        `No details available for input: '${place.name ?? "selected place"}'`
-      );
+      toast(`No details available for: '${place.name ?? "selected place"}'`, "error");
       setSearchLocation(null);
       return;
     }

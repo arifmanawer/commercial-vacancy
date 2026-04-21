@@ -320,7 +320,7 @@ export default function BrowsePage() {
   const filteredListings = listings.filter((listing) => {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      const haystack = [listing.title, listing.address, listing.city, listing.property_type]
+      const haystack = [listing.title, listing.address, listing.city, listing.state, listing.property_type]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -378,6 +378,7 @@ export default function BrowsePage() {
         <div className="mt-8 relative">
           <input
             type="text"
+            aria-label="Search listings"
             placeholder="Search by name, address, neighborhood, or type…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -9,6 +9,7 @@ import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
 import { supabase } from "@/lib/supabaseClient";
+import { useToast } from "@/components/Toast";
 import type {
   Contractor,
   ContractorAvailabilityStatus,
@@ -57,6 +58,7 @@ interface ApiContractorJobResponse {
 export default function LandlordContractorsPage() {
   const router = useRouter();
   const { user, isLandlord, loading } = useAuth();
+  const { toast } = useToast();
 
   const [search, setSearch] = useState("");
   const [selectedServices, setSelectedServices] = useState<ServiceFilter[]>([]);
@@ -234,13 +236,13 @@ export default function LandlordContractorsPage() {
         | null;
 
       if (!res.ok || !json?.success || !json.data) {
-        alert("Unable to start conversation. Please try again.");
+        toast("Unable to start conversation. Please try again.", "error");
         return;
       }
 
       router.push(`/messages/${json.data.id}`);
     } catch {
-      alert("Unable to start conversation. Please try again.");
+      toast("Unable to start conversation. Please try again.", "error");
     }
   };
 

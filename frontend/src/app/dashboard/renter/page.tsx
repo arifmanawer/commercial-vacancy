@@ -8,14 +8,32 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { useConversations } from "@/hooks/useConversations";
 
+type BookingStatus =
+  | "pending_payment"
+  | "reserved"
+  | "active"
+  | "completed"
+  | "cancelled"
+  | "refund_pending"
+  | "refund_completed"
+  | "payment_failed";
+
+type BookingRow = {
+  id: string;
+  renter_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  status: BookingStatus;
+};
+
 type SavedListing = {
   id: string;
   title: string;
   city?: string | null;
   state?: string | null;
   property_type?: string | null;
-  price?: number | null;
-  rental_type?: string | null;
+  rate_amount?: number | null;
+  rate_type?: string | null;
   image?: string | null;
 };
 
@@ -31,6 +49,8 @@ export default function RenterDashboardPage() {
   const [inquiriesError, setInquiriesError] = useState<string | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [upcomingBookingsCount, setUpcomingBookingsCount] = useState(0);
+  const [loadingBookingsCount, setLoadingBookingsCount] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +87,9 @@ export default function RenterDashboardPage() {
 
         const { data: listingRows, error: listingsError } = await supabase
           .from("listings")
-          .select("id, title, city, state, property_type")
+          .select(
+            "id, title, city, state, property_type, rate_type, rate_amount, min_duration, max_duration",
+          )
           .in("id", propertyIds);
 
         if (listingsError) {
@@ -77,32 +99,24 @@ export default function RenterDashboardPage() {
           return;
         }
 
-        const { data: priceRows } = await supabase
-          .from("property_pricing")
-          .select("property_id, price, rental_type")
-          .in("property_id", propertyIds);
-
         const { data: imgRows } = await supabase
           .from("listings_images")
           .select("property_id, image_url")
           .in("property_id", propertyIds);
 
-        const priceMap = new Map<string, any>();
-        (priceRows ?? []).forEach((p: any) => priceMap.set(p.property_id, p));
         const imgMap = new Map<string, any>();
         (imgRows ?? []).forEach((r: any) => imgMap.set(r.property_id, r));
 
         const view: SavedListing[] =
           listingRows?.map((r: any) => {
-            const pricing = priceMap.get(r.id);
             return {
               id: r.id,
               title: r.title,
               city: r.city,
               state: r.state,
               property_type: r.property_type,
-              price: pricing ? pricing.price : null,
-              rental_type: pricing ? pricing.rental_type : null,
+              rate_amount: r.rate_amount ?? null,
+              rate_type: r.rate_type ?? null,
               image: imgMap.get(r.id)?.image_url?.[0] ?? null,
             };
           }) ?? [];
@@ -116,6 +130,55 @@ export default function RenterDashboardPage() {
     }
 
     loadSaved();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBookingsCount() {
+      setLoadingBookingsCount(true);
+      if (!userId) {
+        setUpcomingBookingsCount(0);
+        setLoadingBookingsCount(false);
+        return;
+      }
+
+      const activeStatuses: BookingStatus[] = [
+        "pending_payment",
+        "reserved",
+        "active",
+      ];
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, renter_id, start_datetime, end_datetime, status")
+        .eq("renter_id", userId)
+        .in("status", activeStatuses);
+
+      if (cancelled) return;
+
+      if (error) {
+        // Keep dashboard functional; reservations page will show detailed errors.
+        setUpcomingBookingsCount(0);
+        setLoadingBookingsCount(false);
+        return;
+      }
+
+      const now = Date.now();
+      const rows = (data ?? []) as BookingRow[];
+      const count = rows.filter((b) => {
+        const end = new Date(b.end_datetime).getTime();
+        return Number.isFinite(end) && end >= now;
+      }).length;
+
+      setUpcomingBookingsCount(count);
+      setLoadingBookingsCount(false);
+    }
+
+    loadBookingsCount();
     return () => {
       cancelled = true;
     };
@@ -260,13 +323,23 @@ export default function RenterDashboardPage() {
                 Upcoming booking
               </p>
               <p className="text-sm font-semibold text-slate-900">
-                {inquiries.filter((i) => i.status === "accepted").length > 0
-                  ? `${inquiries.filter((i) => i.status === "accepted").length} accepted request(s)`
-                  : "No confirmed bookings"}
+                {loadingBookingsCount
+                  ? "…"
+                  : upcomingBookingsCount > 0
+                    ? `${upcomingBookingsCount} upcoming`
+                    : "No upcoming reservations"}
               </p>
               <p className="text-xs text-slate-500">
-                Once you book a space, it will appear here.
+                Bookings move to{" "}
+                <span className="font-semibold">Reserved</span> once payment is
+                confirmed.
               </p>
+              <Link
+                href="/dashboard/renter/reservations"
+                className="mt-1 inline-flex items-center text-xs font-medium text-[var(--brand)] hover:underline"
+              >
+                View reservations
+              </Link>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white p-4 flex flex-col gap-2">
@@ -500,8 +573,8 @@ export default function RenterDashboardPage() {
                       {listing.property_type ?? ""}
                     </p>
                     <p className="mt-1 text-sm font-medium text-slate-900">
-                      {listing.price != null && listing.rental_type
-                        ? `${listing.price}/${listing.rental_type}`
+                      {listing.rate_amount != null && listing.rate_type
+                        ? `$${listing.rate_amount}/${listing.rate_type}`
                         : ""}
                     </p>
                     <div className="mt-3">

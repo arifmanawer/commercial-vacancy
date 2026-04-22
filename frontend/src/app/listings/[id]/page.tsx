@@ -95,25 +95,6 @@ export default function ListingPage() {
       setListing(null);
 
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8ebdf7',
-          },
-          body: JSON.stringify({
-            sessionId: '8ebdf7',
-            runId: 'pre-fix-2',
-            hypothesisId: 'H1',
-            location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:entry',
-            message: 'Entering loadListing',
-            data: { id },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
-
         const { data: listingRow, error: listingError } = await supabase
           .from("listings")
           .select(
@@ -123,29 +104,6 @@ export default function ListingPage() {
           .maybeSingle();
 
         if (listingError || !listingRow) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Debug-Session-Id': '8ebdf7',
-            },
-            body: JSON.stringify({
-              sessionId: '8ebdf7',
-              runId: 'pre-fix-2',
-              hypothesisId: 'H2',
-              location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:query:failed',
-              message: 'Listings row missing or query failed',
-              data: {
-                hasError: Boolean(listingError),
-                errorMessage: listingError?.message ?? null,
-                rowExists: Boolean(listingRow),
-              },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion agent log
-
           if (!cancelled) setNotFound(true);
           return;
         }
@@ -194,24 +152,6 @@ export default function ListingPage() {
         }
       } catch {
         if (!cancelled) setNotFound(true);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': '8ebdf7',
-          },
-          body: JSON.stringify({
-            sessionId: '8ebdf7',
-            runId: 'pre-fix-2',
-            hypothesisId: 'H3',
-            location: 'frontend/src/app/listings/[id]/page.tsx:loadListing:catch',
-            message: 'Unexpected exception while loading listing',
-            data: {},
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion agent log
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -439,27 +379,6 @@ export default function ListingPage() {
       setFeedback(null);
       setError(null);
       setStartingConversation(true);
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "e74c3e",
-        },
-        body: JSON.stringify({
-          sessionId: "e74c3e",
-          runId: "debug-preflight",
-          hypothesisId: "H2_CORS_OR_NETWORK_OR_WRONG_PORT",
-          location: "src/app/listings/[id]/page.tsx:startMessageThread",
-          message: "Starting message thread fetch",
-          data: {
-            apiUrl: getApiUrl(),
-            hasListingLandlordUserId: Boolean(listing.landlord_user_id),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
         method: "POST",
         headers: {
@@ -478,57 +397,13 @@ export default function ListingPage() {
         | null;
 
       if (!res.ok || !json?.success || !json.data) {
-        // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "e74c3e",
-          },
-          body: JSON.stringify({
-            sessionId: "e74c3e",
-            runId: "debug-preflight",
-            hypothesisId: "H3_BACKEND_RESPONSE_ERROR",
-            location: "src/app/listings/[id]/page.tsx:startMessageThread",
-            message: "Received non-ok backend response starting conversation",
-            data: {
-              status: res.status,
-              statusText: res.statusText,
-              backendSuccess: json?.success,
-              backendError: json?.error,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         console.error("Failed to start conversation", json?.error);
         setError("Unable to start message. Please try again.");
         return;
       }
 
       router.push(`/messages/${json.data.id}`);
-    } catch (err) {
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/732c440c-88ac-4208-979e-9aee3e11d0cd", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "e74c3e",
-        },
-        body: JSON.stringify({
-          sessionId: "e74c3e",
-          runId: "debug-preflight",
-          hypothesisId: "H1_WRONG_API_URL_PORT_OR_CORS",
-          location: "src/app/listings/[id]/page.tsx:startMessageThread",
-          message: "Fetch threw (network/CORS/etc.) starting conversation",
-          data: {
-            errorName: (err as any)?.name,
-            errorMessage: (err as any)?.message || String(err),
-          },
-          timestamp: Date.now(),
-        }),
-      });
-      // #endregion
+    } catch (err: unknown) {
       console.error(err);
       setError("Unable to start message. Please try again.");
     } finally {

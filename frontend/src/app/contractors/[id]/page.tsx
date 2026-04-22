@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProfileReviews from "@/components/ProfileReviews";
 import { getApiUrl } from "@/lib/api";
+import { contractorRatingCaption } from "@/lib/contractorReputation";
 import type { Contractor, ContractorAvailabilityStatus } from "@/types/database";
 
 interface ApiContractorResponse {
@@ -45,48 +46,37 @@ export default function ContractorProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadContractor = useCallback(async () => {
     if (!contractorId) {
       setLoading(false);
       setError("Missing contractor id.");
       return;
     }
 
-    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/contractors/${contractorId}`);
+      const body = (await res.json().catch(() => null)) as ApiContractorResponse | null;
 
-    async function loadContractor() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${getApiUrl()}/api/contractors/${contractorId}`);
-        const body = (await res.json().catch(() => null)) as ApiContractorResponse | null;
-
-        if (!res.ok || !body?.success || !body.data) {
-          throw new Error(body?.error || "Failed to load contractor profile");
-        }
-
-        if (!cancelled) {
-          setContractor(body.data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load contractor profile",
-          );
-          setContractor(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      if (!res.ok || !body?.success || !body.data) {
+        throw new Error(body?.error || "Failed to load contractor profile");
       }
-    }
 
-    loadContractor();
-    return () => {
-      cancelled = true;
-    };
+      setContractor(body.data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load contractor profile",
+      );
+      setContractor(null);
+    } finally {
+      setLoading(false);
+    }
   }, [contractorId]);
+
+  useEffect(() => {
+    void loadContractor();
+  }, [loadContractor]);
 
   const orderedDays = useMemo(() => {
     const dayOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -161,7 +151,7 @@ export default function ContractorProfilePage() {
                     <span className="text-amber-500">★</span>
                     <span className="font-medium">{contractor.rating.toFixed(1)}</span>
                     <span className="text-slate-400">
-                      ({contractor.total_jobs_completed} jobs)
+                      {contractorRatingCaption(contractor)}
                     </span>
                   </span>
                   <span className="text-slate-300">|</span>
@@ -208,7 +198,10 @@ export default function ContractorProfilePage() {
             </div>
           </section>
 
-          <ProfileReviews targetUserId={contractor.user_id} />
+          <ProfileReviews
+            targetUserId={contractor.user_id}
+            onReviewSubmitted={() => void loadContractor()}
+          />
           </>
         )}
       </main>

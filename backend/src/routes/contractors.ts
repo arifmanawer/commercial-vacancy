@@ -33,11 +33,50 @@ interface ContractorApiModel {
   service_radius: number;
   rating: number;
   total_jobs_completed: number;
+  /** Count of rows in public.reviews for this contractor's user_id (drives rating when > 0). */
+  review_count: number;
   is_verified: boolean;
   availability: {
     status: ContractorAvailabilityStatus;
     available_days: string[];
   };
+}
+
+interface ReviewAggregate {
+  avgRating: number;
+  count: number;
+}
+
+async function fetchReviewAggregatesByTargetUserIds(
+  userIds: string[],
+): Promise<Map<string, ReviewAggregate>> {
+  const unique = [...new Set(userIds)].filter(Boolean);
+  const map = new Map<string, ReviewAggregate>();
+  if (!unique.length) return map;
+
+  const { data, error } = await supabaseAdmin
+    .from('reviews')
+    .select('target_user_id, rating')
+    .in('target_user_id', unique);
+
+  if (error || !data?.length) {
+    return map;
+  }
+
+  const sums = new Map<string, { sum: number; count: number }>();
+  for (const row of data as { target_user_id: string; rating: number }[]) {
+    const uid = row.target_user_id;
+    const prev = sums.get(uid) ?? { sum: 0, count: 0 };
+    prev.sum += Number(row.rating);
+    prev.count += 1;
+    sums.set(uid, prev);
+  }
+
+  for (const [uid, v] of sums) {
+    const avgRating = v.count ? Math.round((v.sum / v.count) * 10) / 10 : 0;
+    map.set(uid, { avgRating, count: v.count });
+  }
+  return map;
 }
 
 function logContractorApi(
@@ -53,7 +92,12 @@ function logContractorApi(
   console.log(msg, { timestamp: new Date().toISOString() });
 }
 
-function mapRowToApiModel(row: ContractorRow): ContractorApiModel {
+function mapRowToApiModel(
+  row: ContractorRow,
+  reviewAgg?: ReviewAggregate | null,
+): ContractorApiModel {
+  const hasReviews = Boolean(reviewAgg && reviewAgg.count > 0);
+  const rating = hasReviews ? reviewAgg!.avgRating : row.rating;
   return {
     id: row.id,
     user_id: row.user_id,
@@ -62,8 +106,9 @@ function mapRowToApiModel(row: ContractorRow): ContractorApiModel {
     services: row.services,
     hourly_rate: row.hourly_rate,
     service_radius: row.service_radius,
-    rating: row.rating,
+    rating,
     total_jobs_completed: row.total_jobs_completed,
+    review_count: hasReviews ? reviewAgg!.count : 0,
     is_verified: row.is_verified,
     availability: {
       status: row.availability_status,
@@ -136,7 +181,8 @@ router.get<
       return;
     }
 
-    const contractor = mapRowToApiModel(data);
+    const aggMap = await fetchReviewAggregatesByTargetUserIds([data.user_id]);
+    const contractor = mapRowToApiModel(data, aggMap.get(data.user_id));
 
     logContractorApi('GET', '/api/contractors/me', userId, true);
     res.json({ success: true, data: contractor });
@@ -183,7 +229,8 @@ router.get<
       return;
     }
 
-    const contractor = mapRowToApiModel(data);
+    const aggMap = await fetchReviewAggregatesByTargetUserIds([data.user_id]);
+    const contractor = mapRowToApiModel(data, aggMap.get(data.user_id));
     logContractorApi('GET', '/api/contractors/:id', undefined, true);
     res.json({ success: true, data: contractor });
   })
@@ -296,7 +343,8 @@ router.post<
       return;
     }
 
-    const contractor = mapRowToApiModel(data);
+    const aggMap = await fetchReviewAggregatesByTargetUserIds([data.user_id]);
+    const contractor = mapRowToApiModel(data, aggMap.get(data.user_id));
 
     logContractorApi('POST', '/api/contractors/me', userId, true);
     res.status(201).json({ success: true, data: contractor });
@@ -421,7 +469,18 @@ router.get<
     }
 
     const rows: ContractorRow[] = data ?? [];
-    const contractors: ContractorApiModel[] = rows.map(mapRowToApiModel);
+    const userIds = rows.map((r) => r.user_id);
+    const aggMap = await fetchReviewAggregatesByTargetUserIds(userIds);
+
+    const contractors: ContractorApiModel[] = rows
+      .map((row) => mapRowToApiModel(row, aggMap.get(row.user_id)))
+      .sort((a, b) => {
+        if (b.rating !== a.rating) return b.rating - a.rating;
+        if (b.total_jobs_completed !== a.total_jobs_completed) {
+          return b.total_jobs_completed - a.total_jobs_completed;
+        }
+        return a.business_name.localeCompare(b.business_name);
+      });
 
     const total = count ?? 0;
     const totalPages = total ? Math.ceil(total / pageSize) : 0;

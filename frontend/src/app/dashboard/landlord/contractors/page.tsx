@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
+import { contractorRatingCaption } from "@/lib/contractorReputation";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/components/Toast";
 import type {
@@ -564,7 +565,7 @@ export default function LandlordContractorsPage() {
                           {contractor.rating.toFixed(1)}
                         </span>
                         <span className="text-slate-400">
-                          ({contractor.total_jobs_completed} jobs)
+                          {contractorRatingCaption(contractor)}
                         </span>
                       </span>
                     </div>

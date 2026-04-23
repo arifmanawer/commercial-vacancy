@@ -3,7 +3,7 @@ import type Stripe from 'stripe';
 import { requireStripe } from '../lib/stripe';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 
-type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
+type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled' | 'countered';
 
 type BookingStatus =
   | 'pending_payment'

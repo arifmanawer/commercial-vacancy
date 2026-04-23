@@ -376,6 +376,7 @@ router.post<
         listing_id: listing.id,
         landlord_id: listing.user_id,
         renter_id: userId,
+        created_by: userId,
         rate_type: listing.rate_type,
         rate_amount: perUnit,
         currency,

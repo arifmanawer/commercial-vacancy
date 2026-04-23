@@ -12,9 +12,40 @@ export interface Message {
   created_at: string;
 }
 
+export interface OfferActionability {
+  canAccept: boolean;
+  canReject: boolean;
+  canCounter: boolean;
+  canWithdraw: boolean;
+  reasonIfDisabled: string | null;
+}
+
+export interface OfferModel {
+  id: string;
+  conversation_id: string;
+  listing_id: string;
+  landlord_id: string;
+  renter_id: string;
+  parent_offer_id?: string | null;
+  created_by?: string;
+  rate_type: string;
+  rate_amount: number;
+  currency: string;
+  start_date: string;
+  duration: number;
+  subtotal_amount: number;
+  platform_fee_amount: number;
+  total_amount: number;
+  status: string;
+  notes?: string | null;
+  created_at: string;
+}
+
 interface ConversationResponse {
   conversation: ConversationSummary;
   messages: Message[];
+  latestOffer?: OfferModel | null;
+  offerActionability?: OfferActionability;
 }
 
 export function useConversation(conversationId: string | null) {
@@ -23,7 +54,27 @@ export function useConversation(conversationId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [latestOffer, setLatestOffer] = useState<any | null>(null);
+  const [latestOffer, setLatestOffer] = useState<OfferModel | null>(null);
+  const [offerActionability, setOfferActionability] = useState<OfferActionability | null>(null);
+
+  async function refreshConversation() {
+    if (!user || !conversationId) return;
+    const res = await fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}`, {
+      headers: {
+        "X-User-Id": user.id,
+      },
+    });
+    const json = (await res.json().catch(() => null)) as
+      | { success?: boolean; data?: ConversationResponse; error?: string }
+      | null;
+    if (!res.ok || !json?.success || !json.data) {
+      throw new Error(json?.error || "Failed to refresh conversation");
+    }
+    setConversation(json.data.conversation);
+    setMessages(json.data.messages);
+    setLatestOffer(json.data.latestOffer ?? null);
+    setOfferActionability(json.data.offerActionability ?? null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +102,7 @@ export function useConversation(conversationId: string | null) {
         const json = (await res.json().catch(() => null)) as
           | {
               success?: boolean;
-              data?: ConversationResponse & { latestOffer?: any };
+              data?: ConversationResponse;
               error?: string;
             }
           | null;
@@ -67,6 +118,7 @@ export function useConversation(conversationId: string | null) {
           setConversation(json.data.conversation);
           setMessages(json.data.messages);
           setLatestOffer(json.data.latestOffer ?? null);
+          setOfferActionability(json.data.offerActionability ?? null);
         }
 
         if (json.data.conversation.unread_count > 0) {
@@ -142,6 +194,16 @@ export function useConversation(conversationId: string | null) {
     };
   }, [conversationId]);
 
-  return { conversation, messages, setMessages, latestOffer, setLatestOffer, loading, error };
+  return {
+    conversation,
+    messages,
+    setMessages,
+    latestOffer,
+    setLatestOffer,
+    offerActionability,
+    refreshConversation,
+    loading,
+    error,
+  };
 }
 

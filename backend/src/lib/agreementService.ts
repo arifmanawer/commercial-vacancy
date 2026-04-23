@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import { supabaseAdmin } from './supabaseAdmin';
 import { sendTransactionalEmail } from './email';
 
-type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled';
+type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled' | 'countered';
 
 interface OfferRow {
   id: string;

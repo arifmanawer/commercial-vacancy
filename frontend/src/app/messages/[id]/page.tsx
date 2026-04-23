@@ -1,11 +1,11 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { useConversation } from "@/hooks/useConversation";
+import { OfferModel, useConversation } from "@/hooks/useConversation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
 import { useToast } from "@/components/Toast";
@@ -14,15 +14,46 @@ export default function ConversationPage() {
   const params = useParams<{ id: string }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const { user } = useAuth();
-  const { conversation, messages, setMessages, latestOffer, loading, error } =
-    useConversation(id ?? null);
+  const {
+    conversation,
+    messages,
+    setMessages,
+    latestOffer,
+    offerActionability,
+    refreshConversation,
+    loading,
+    error,
+  } = useConversation(id ?? null);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
   const [creatingOffer, setCreatingOffer] = useState(false);
+  const [offerMode, setOfferMode] = useState<"create" | "counter">("create");
   const [offerStart, setOfferStart] = useState("");
   const [offerDuration, setOfferDuration] = useState("");
+  const [offerRateAmount, setOfferRateAmount] = useState("");
+  const [offerRateType, setOfferRateType] = useState("");
+  const [offerNotes, setOfferNotes] = useState("");
   const [offerSubmitting, setOfferSubmitting] = useState(false);
+  const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
+  const [offerHistory, setOfferHistory] = useState<OfferModel[]>([]);
+  const [offerHistoryLoading, setOfferHistoryLoading] = useState(false);
+
+  const durationUnitLabel = useMemo(() => {
+    const normalized = offerRateType.trim().toLowerCase();
+    switch (normalized) {
+      case "hourly":
+        return "hours";
+      case "weekly":
+        return "weeks";
+      case "monthly":
+        return "months";
+      case "daily":
+        return "days";
+      default:
+        return "units";
+    }
+  }, [offerRateType]);
 
   const isLandlordInConversation = useMemo(() => {
     if (!conversation || !user) return false;
@@ -38,7 +69,44 @@ export default function ConversationPage() {
     );
   }, [conversation, user]);
 
-  const activeOffer = latestOffer;
+  const isParticipantInConversation = useMemo(() => {
+    if (!conversation || !user) return false;
+    return conversation.participants.some((p) => p.user_id === user.id);
+  }, [conversation, user]);
+
+  const canCreateOffer =
+    conversation?.context_type === "listing" &&
+    (isLandlordInConversation || isRenterInConversation || isParticipantInConversation) &&
+    latestOffer?.status !== "pending";
+
+  async function loadOfferHistory() {
+    if (!id || !user) return;
+    setOfferHistoryLoading(true);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/offers/conversation/${id}`, {
+        headers: {
+          "X-User-Id": user.id,
+        },
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: OfferModel[]; error?: string }
+        | null;
+      if (!res.ok || !json?.success || !Array.isArray(json.data)) {
+        throw new Error(json?.error || "Failed to load offer history");
+      }
+      setOfferHistory(json.data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load offer history";
+      toast(msg, "error");
+    } finally {
+      setOfferHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadOfferHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user?.id]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -104,33 +172,54 @@ export default function ConversationPage() {
       return;
     }
 
-    const renterParticipant = conversation.participants.find(
-      (p) => p.user_id !== user.id && p.role === "renter",
-    );
+    const renterParticipant = conversation.participants.find((p) => p.role === "renter");
     const renterId = renterParticipant?.user_id;
 
-    if (!renterId || !conversation.context_listing_id) {
+    if (!conversation.context_listing_id) {
       alert(
-        "This conversation is not linked to a listing and renter yet. You can only create offers from listing conversations.",
+        "This conversation is not linked to a listing yet. You can only create offers from listing conversations.",
       );
+      return;
+    }
+    if (offerMode === "create" && isLandlordInConversation && !renterId) {
+      alert("Could not find a renter participant in this conversation.");
       return;
     }
 
     setOfferSubmitting(true);
     try {
-      const res = await fetch(`${getApiUrl()}/api/offers`, {
+      const endpoint =
+        offerMode === "counter" && latestOffer?.id
+          ? `${getApiUrl()}/api/offers/${latestOffer.id}/counter`
+          : `${getApiUrl()}/api/offers`;
+      const payload: Record<string, unknown> = {
+        startDate: offerStart,
+        duration,
+      };
+      if (offerRateAmount.trim()) {
+        payload.rateAmount = Number(offerRateAmount);
+      }
+      if (offerRateType.trim()) {
+        payload.rateType = offerRateType.trim();
+      }
+      if (offerNotes.trim()) {
+        payload.notes = offerNotes.trim();
+      }
+      if (offerMode === "create") {
+        payload.conversationId = id;
+        payload.listingId = conversation.context_listing_id;
+        if (isLandlordInConversation && renterId) {
+          payload.renterId = renterId;
+        }
+      }
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-User-Id": user.id,
         },
-        body: JSON.stringify({
-          conversationId: id,
-          listingId: conversation.context_listing_id,
-          renterId,
-          startDate: offerStart,
-          duration,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = (await res.json().catch(() => null)) as
@@ -143,10 +232,13 @@ export default function ConversationPage() {
 
       setOfferStart("");
       setOfferDuration("");
+      setOfferRateAmount("");
+      setOfferRateType("");
+      setOfferNotes("");
       setCreatingOffer(false);
-      // Optimistically set latest offer for this thread
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).latestOfferDebug = json.data;
+      await refreshConversation();
+      await loadOfferHistory();
+      toast(offerMode === "counter" ? "Counter-offer sent." : "Offer created.", "success");
     } catch (err) {
       const msg =
         err instanceof Error
@@ -156,6 +248,48 @@ export default function ConversationPage() {
     } finally {
       setOfferSubmitting(false);
     }
+  }
+
+  async function handleOfferAction(action: "accept" | "reject" | "withdraw") {
+    if (!user || !latestOffer?.id) return;
+    setOfferActionLoading(action);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/offers/${latestOffer.id}/${action}`, {
+        method: "POST",
+        headers: {
+          "X-User-Id": user.id,
+        },
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; error?: string }
+        | null;
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || `Failed to ${action} offer`);
+      }
+      await refreshConversation();
+      await loadOfferHistory();
+      toast(`Offer ${action}ed.`, "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : `Failed to ${action} offer`;
+      toast(msg, "error");
+    } finally {
+      setOfferActionLoading(null);
+    }
+  }
+
+  function formatMoney(cents: number, currency: string | undefined) {
+    return (cents / 100).toLocaleString(undefined, {
+      style: "currency",
+      currency: (currency || "usd").toUpperCase(),
+    });
+  }
+
+  function formatStatusLabel(status: string | undefined) {
+    if (!status) return "Unknown";
+    return status
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   return (
@@ -209,15 +343,16 @@ export default function ConversationPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {conversation.context_type === "listing" && isLandlordInConversation && (
+                {conversation.context_type === "listing" && canCreateOffer && (
                   <button
                     type="button"
                     onClick={() => {
+                      setOfferMode("create");
                       setCreatingOffer((prev) => !prev);
                     }}
                     className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                   >
-                    {creatingOffer ? "Close offer" : "Create Offer"}
+                    {creatingOffer && offerMode === "create" ? "Close offer" : "Create Offer"}
                   </button>
                 )}
 
@@ -233,7 +368,7 @@ export default function ConversationPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              {activeOffer && (
+              {latestOffer && (
                 <div className="mb-3 flex justify-center">
                   <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-800 shadow-sm">
                     <div className="flex items-center justify-between gap-2">
@@ -242,53 +377,118 @@ export default function ConversationPage() {
                           Offer
                         </p>
                         <p className="text-sm font-semibold text-slate-900">
-                          {activeOffer.rate_amount} {activeOffer.currency?.toUpperCase() ?? "USD"}/
-                          {activeOffer.rate_type}
+                          {latestOffer.rate_amount} {latestOffer.currency?.toUpperCase() ?? "USD"}/
+                          {latestOffer.rate_type}
                         </p>
                       </div>
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                        {activeOffer.status}
+                        {formatStatusLabel(latestOffer.status)}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-600">
                       Start:{" "}
-                      {activeOffer.start_date
-                        ? new Date(activeOffer.start_date).toLocaleString()
+                      {latestOffer.start_date
+                        ? new Date(latestOffer.start_date).toLocaleString()
                         : "—"}
                     </p>
                     <p className="text-xs text-slate-600">
-                      Duration: {activeOffer.duration} {activeOffer.rate_type}
+                      Duration: {latestOffer.duration} {latestOffer.rate_type}
                     </p>
                     <p className="mt-1 text-xs font-medium text-slate-900">
-                      Total: ${(activeOffer.total_amount / 100).toFixed(2)}{" "}
-                      {activeOffer.currency?.toUpperCase() ?? "USD"}
+                      Total: {formatMoney(latestOffer.total_amount, latestOffer.currency)}
                     </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Review the dates, price, and any refund policy in the listing before you accept.
-                      When you accept and complete payment, you&apos;ll enter into a binding rental agreement
-                      with this landlord through Commercial Vacancy.
-                    </p>
-                    {isRenterInConversation && activeOffer.status === "pending" && (
+                    {latestOffer.notes && (
+                      <p className="mt-1 text-xs text-slate-600">Note: {latestOffer.notes}</p>
+                    )}
+                    {latestOffer.status === "pending" && (
                       <div className="mt-2 flex gap-2">
+                        {offerActionability?.canAccept && (
+                          <button
+                            type="button"
+                            className="inline-flex flex-1 items-center justify-center rounded-md bg-[var(--brand)] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--brand-dark)] disabled:opacity-60"
+                            onClick={() => handleOfferAction("accept")}
+                            disabled={offerActionLoading !== null}
+                          >
+                            {offerActionLoading === "accept" ? "Accepting..." : "Accept"}
+                          </button>
+                        )}
+                        {offerActionability?.canReject && (
+                          <button
+                            type="button"
+                            className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            onClick={() => handleOfferAction("reject")}
+                            disabled={offerActionLoading !== null}
+                          >
+                            {offerActionLoading === "reject" ? "Rejecting..." : "Reject"}
+                          </button>
+                        )}
+                        {offerActionability?.canWithdraw && (
+                          <button
+                            type="button"
+                            className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            onClick={() => handleOfferAction("withdraw")}
+                            disabled={offerActionLoading !== null}
+                          >
+                            {offerActionLoading === "withdraw" ? "Withdrawing..." : "Withdraw"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {latestOffer.status === "pending" && offerActionability?.canCounter && (
+                      <div className="mt-2">
                         <button
                           type="button"
-                          className="inline-flex flex-1 items-center justify-center rounded-md bg-[var(--brand)] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--brand-dark)] disabled:opacity-60"
-                          disabled
+                          onClick={() => {
+                            setOfferMode("counter");
+                            setCreatingOffer(true);
+                          }}
+                          className="inline-flex w-full items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          Accept &amp; pay (coming soon)
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                          disabled
-                        >
-                          Decline
+                          Counter Offer
                         </button>
                       </div>
+                    )}
+                    {offerActionability?.reasonIfDisabled && latestOffer.status !== "pending" && (
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {offerActionability.reasonIfDisabled}
+                      </p>
                     )}
                   </div>
                 </div>
               )}
+
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold text-slate-700">Offer History</p>
+                  <button
+                    type="button"
+                    onClick={loadOfferHistory}
+                    className="text-[11px] text-[var(--brand)] hover:underline"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                {offerHistoryLoading ? (
+                  <p className="text-[11px] text-slate-500">Loading offers...</p>
+                ) : offerHistory.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">No offers yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {offerHistory.slice(0, 5).map((offer) => (
+                      <div
+                        key={offer.id}
+                        className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-[11px]"
+                      >
+                        <span className="text-slate-700">
+                          {formatMoney(offer.total_amount, offer.currency)} / {offer.rate_type} •{" "}
+                          {offer.duration}
+                        </span>
+                        <span className="text-slate-500">{formatStatusLabel(offer.status)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {messages.map((msg) => {
                 const isSelf = msg.sender_id === user?.id;
@@ -317,13 +517,15 @@ export default function ConversationPage() {
             </div>
 
             <div className="border-t border-slate-200 bg-white px-3 py-2 space-y-3">
-              {creatingOffer && conversation?.context_type === "listing" && isLandlordInConversation && (
+              {creatingOffer && conversation?.context_type === "listing" && (
                 <form
                   onSubmit={handleCreateOffer}
                   className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 space-y-2"
                 >
                   <p className="text-xs font-semibold text-slate-800">
-                    Create an offer based on this listing&apos;s rate.
+                    {offerMode === "counter"
+                      ? "Counter the current pending offer."
+                      : "Create an offer for this listing conversation."}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-[11px] font-medium text-slate-700">
@@ -337,17 +539,62 @@ export default function ConversationPage() {
                       />
                     </label>
                     <label className="text-[11px] font-medium text-slate-700">
-                      Duration
+                      Duration ({durationUnitLabel})
                       <input
                         type="number"
                         min={1}
                         value={offerDuration}
                         onChange={(e) => setOfferDuration(e.target.value)}
+                        placeholder={
+                          durationUnitLabel === "units"
+                            ? "e.g. 3"
+                            : `e.g. 3 ${durationUnitLabel}`
+                        }
                         className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
                         required
                       />
+                      <p className="mt-1 text-[10px] font-normal text-slate-500">
+                        Enter how many {durationUnitLabel} this offer should cover.
+                      </p>
+                    </label>
+                    <label className="text-[11px] font-medium text-slate-700">
+                      Rate amount (optional override)
+                      <input
+                        type="number"
+                        min={1}
+                        step="0.01"
+                        value={offerRateAmount}
+                        onChange={(e) => setOfferRateAmount(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
+                      />
+                    </label>
+                    <label className="text-[11px] font-medium text-slate-700">
+                      Rate type (optional override)
+                      <select
+                        value={offerRateType}
+                        onChange={(e) => setOfferRateType(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
+                      >
+                        <option value="">Use listing rate type</option>
+                        <option value="hourly">Hourly</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                      <p className="mt-1 text-[10px] font-normal text-slate-500">
+                        Rate type controls how duration is interpreted.
+                      </p>
                     </label>
                   </div>
+                  <label className="block text-[11px] font-medium text-slate-700">
+                    Note (optional)
+                    <textarea
+                      value={offerNotes}
+                      onChange={(e) => setOfferNotes(e.target.value)}
+                      rows={2}
+                      className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
+                    />
+                  </label>
                   <div className="flex justify-end gap-2 pt-1">
                     <button
                       type="button"
@@ -362,7 +609,11 @@ export default function ConversationPage() {
                       disabled={offerSubmitting}
                       className="inline-flex items-center rounded-md bg-[var(--brand)] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[var(--brand-dark)] disabled:opacity-60"
                     >
-                      {offerSubmitting ? "Creating…" : "Send Offer"}
+                      {offerSubmitting
+                        ? "Sending..."
+                        : offerMode === "counter"
+                          ? "Send Counter"
+                          : "Send Offer"}
                     </button>
                   </div>
                 </form>

@@ -34,15 +34,33 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
+function roleContextBadgeLabel(role: Review["role_context"]) {
+  switch (role) {
+    case "landlord":
+      return "Posted as landlord";
+    case "contractor":
+      return "Posted as contractor";
+    case "renter":
+      return "Posted as renter";
+    default:
+      return "Review";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 interface ProfileReviewsProps {
   targetUserId: string;
+  /** Called after a review is submitted so parents can refresh contractor stats from the API. */
+  onReviewSubmitted?: () => void;
 }
 
-export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
+export default function ProfileReviews({
+  targetUserId,
+  onReviewSubmitted,
+}: ProfileReviewsProps) {
   const { user } = useAuth();
 
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -57,6 +75,7 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [editingReview, setEditingReview] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Fetch reviews
@@ -119,6 +138,66 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
 
+  const beginEditReview = () => {
+    if (!currentUserReview) return;
+    setEditingReview(true);
+    setRating(currentUserReview.rating);
+    setRoleContext(currentUserReview.role_context);
+    setContent(currentUserReview.content);
+    setSubmitError(null);
+    setHoverRating(0);
+  };
+
+  const cancelEditReview = () => {
+    setEditingReview(false);
+    setSubmitError(null);
+    setHoverRating(0);
+    if (currentUserReview) {
+      setRating(currentUserReview.rating);
+      setRoleContext(currentUserReview.role_context);
+      setContent(currentUserReview.content);
+    }
+  };
+
+  const handleUpdateReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || rating === 0 || !content.trim()) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/profiles/${targetUserId}/reviews`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": user.id,
+        },
+        body: JSON.stringify({
+          rating,
+          role_context: roleContext,
+          content: content.trim(),
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        setSubmitError(result.error ?? "Could not update your review.");
+        return;
+      }
+
+      const updated = result.data as Review;
+      setReviews((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setEditingReview(false);
+      onReviewSubmitted?.();
+    } catch {
+      setSubmitError("Could not reach the server. Please try again later.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Submit review
   // ---------------------------------------------------------------------------
@@ -151,6 +230,7 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
       setRating(0);
       setContent("");
       setSubmitSuccess(true);
+      onReviewSubmitted?.();
     } catch {
       setSubmitError("Could not reach the server. Please try again later.");
     } finally {
@@ -167,7 +247,10 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 pt-6 border-t border-slate-100">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Reviews</h2>
-          <p className="text-slate-500 mt-1">What others are saying about this user</p>
+          <p className="text-slate-500 mt-1 max-w-xl">
+            Ratings and comments from people who&apos;ve rented, hosted, or hired through the platform.
+            Your perspective (landlord, renter, or contractor) helps others understand the context.
+          </p>
         </div>
 
         {!loading && reviews.length > 0 && (
@@ -238,7 +321,7 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
               </svg>
               <h3 className="text-lg font-medium text-slate-900">No reviews yet</h3>
               <p className="text-slate-500 mt-1 max-w-sm mx-auto text-sm">
-                Be the first to leave a review and share your experience with others.
+                When you&apos;ve finished a booking, tour, or job with this person, leave an honest rating and a short note so the community can trust who they&apos;re working with.
               </p>
             </div>
           ) : (
@@ -283,7 +366,7 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
                       <div className="text-right flex flex-col items-end">
                         <StarRating rating={review.rating} />
                         <span
-                          className={`mt-1.5 inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                          className={`mt-1.5 inline-block text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-full ${
                             isContractor
                               ? "bg-blue-50 text-blue-700"
                               : isRenter
@@ -291,7 +374,7 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
                               : "bg-slate-100 text-slate-700"
                           }`}
                         >
-                          Reviewed as {review.role_context}
+                          {roleContextBadgeLabel(review.role_context)}
                         </span>
                       </div>
                     </div>
@@ -311,7 +394,10 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
         {/* ---------------------------------------------------------------- */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-lg shadow-slate-200/40 sticky top-24">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Leave a Review</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Leave a review</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              One review per account. Be specific about communication, punctuality, and quality of work or hosting.
+            </p>
 
             {!user ? (
               /* Not signed in */
@@ -331,11 +417,90 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
               <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 text-amber-800 text-sm">
                 You cannot leave a review for your own profile.
               </div>
+            ) : currentUserReview && editingReview ? (
+              <form onSubmit={handleUpdateReview} className="space-y-5">
+                <p className="text-sm font-medium text-slate-800">Edit your review</p>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    Rating
+                  </label>
+                  <div className="flex gap-1" onMouseLeave={() => setHoverRating(0)}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        onMouseEnter={() => setHoverRating(star)}
+                        className="p-1 focus:outline-none transform hover:scale-110 transition-transform"
+                      >
+                        <StarIcon
+                          filled={star <= (hoverRating || rating)}
+                          className="w-8 h-8 drop-shadow-sm"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    Your role
+                  </label>
+                  <select
+                    value={roleContext}
+                    onChange={(e) => setRoleContext(e.target.value as typeof roleContext)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-[var(--brand)] focus:border-[var(--brand)] block p-2.5 transition-colors"
+                  >
+                    <option value="landlord">
+                      Landlord — I hosted or managed the space
+                    </option>
+                    <option value="contractor">
+                      Contractor — another tradesperson / peer on the platform
+                    </option>
+                    <option value="renter">
+                      Renter — I rented, toured, or booked space with them
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    Written review
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Describe what happened: timelines, communication, workmanship, cleanliness, whether you’d hire or host again—and anything future users should know."
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-[var(--brand)] focus:border-[var(--brand)] block p-3 resize-none transition-colors placeholder:text-slate-400"
+                  />
+                </div>
+                {submitError && (
+                  <div className="bg-red-50 rounded-lg px-4 py-3 border border-red-100">
+                    <p className="text-red-700 text-sm">{submitError}</p>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelEditReview}
+                    disabled={submitting}
+                    className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || rating === 0 || !content.trim()}
+                    className="flex-1 rounded-lg bg-[var(--brand)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? "Saving…" : "Save changes"}
+                  </button>
+                </div>
+              </form>
             ) : currentUserReview ? (
-              /* Already reviewed */
-              <div className="bg-green-50 rounded-xl p-5 border border-green-100 text-center">
+              <div className="bg-green-50 rounded-xl p-5 border border-green-100 text-center space-y-3">
                 <svg
-                  className="w-8 h-8 text-green-500 mx-auto mb-2"
+                  className="w-8 h-8 text-green-500 mx-auto"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -347,10 +512,21 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="text-green-800 font-medium text-sm">You&apos;ve already reviewed this user.</p>
-                <p className="text-green-700 text-xs mt-1">
-                  You gave them {currentUserReview.rating} star{currentUserReview.rating !== 1 ? "s" : ""}.
+                <p className="text-green-800 font-medium text-sm">You&apos;ve reviewed this user.</p>
+                <p className="text-green-700 text-xs">
+                  {currentUserReview.rating} star{currentUserReview.rating !== 1 ? "s" : ""} ·{" "}
+                  {roleContextBadgeLabel(currentUserReview.role_context)}
                 </p>
+                <p className="text-left text-xs text-slate-600 line-clamp-4 border border-green-100/80 rounded-lg bg-white/80 p-3">
+                  {currentUserReview.content}
+                </p>
+                <button
+                  type="button"
+                  onClick={beginEditReview}
+                  className="w-full rounded-lg border border-green-200 bg-white px-4 py-2.5 text-sm font-medium text-green-900 hover:bg-green-50"
+                >
+                  Edit review
+                </button>
               </div>
             ) : submitSuccess ? (
               /* Just submitted */
@@ -396,35 +572,48 @@ export default function ProfileReviews({ targetUserId }: ProfileReviewsProps) {
                   </div>
                 </div>
 
-                {/* Interaction type */}
+                {/* Perspective (stored as role_context on the review row) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
-                    Interaction Type
+                    Your role
                   </label>
                   <select
                     value={roleContext}
                     onChange={(e) => setRoleContext(e.target.value as typeof roleContext)}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-[var(--brand)] focus:border-[var(--brand)] block p-2.5 transition-colors"
                   >
-                    <option value="landlord">They were a Landlord</option>
-                    <option value="contractor">They were a Contractor</option>
-                    <option value="renter">They were a Renter</option>
+                    <option value="landlord">
+                      Landlord — I hosted or managed the space
+                    </option>
+                    <option value="contractor">
+                      Contractor — another tradesperson / peer on the platform
+                    </option>
+                    <option value="renter">
+                      Renter — I rented, toured, or booked space with them
+                    </option>
                   </select>
+                  <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                    This labels <span className="font-medium text-slate-600">your</span> perspective, not theirs. Pick the role you were in when you interacted (e.g. landlords reviewing a contractor choose{" "}
+                    <span className="font-medium">Landlord</span>).
+                  </p>
                 </div>
 
                 {/* Content */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
-                    Your Experience
+                    Written review
                   </label>
                   <textarea
                     required
                     rows={4}
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    placeholder="Tell others what it was like working with this person..."
+                    placeholder="Describe what happened: timelines, communication, workmanship, cleanliness, whether you’d hire or host again—and anything future users should know."
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-[var(--brand)] focus:border-[var(--brand)] block p-3 resize-none transition-colors placeholder:text-slate-400"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    Keep it factual and respectful. No threats, harassment, or private contact details.
+                  </p>
                 </div>
 
                 {/* Error message */}

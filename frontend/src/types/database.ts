@@ -24,6 +24,8 @@ export type Contractor = {
   service_radius: number;
   rating: number;
   total_jobs_completed: number;
+  /** Public reviews count; when >0, `rating` is the live average from reviews. */
+  review_count: number;
   is_verified: boolean;
   availability: {
     status: ContractorAvailabilityStatus;

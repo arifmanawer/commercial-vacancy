@@ -100,17 +100,22 @@ export default function MessagesPage() {
             <div className="space-y-3">
               {conversations.map((conv) => {
                 const unread = conv.unread_count > 0;
+                const otherParticipant = conv.participants.find((p) => p.user_id !== user.id) ?? null;
                 const hasListing =
                   conv.context_type === "listing" && conv.context_listing_id;
-                const title = hasListing && conv.context_listing_title
+                const title = otherParticipant?.display_name
+                  ? otherParticipant.display_name
+                  : hasListing && conv.context_listing_title
                   ? conv.context_listing_title
                   : conv.context_type === "listing"
                   ? "Listing conversation"
                   : conv.context_type === "contractor"
                   ? "Contractor conversation"
                   : "General conversation";
-                const subtitle = hasListing && conv.context_listing_address
-                  ? conv.context_listing_address
+                const subtitle = hasListing
+                  ? conv.context_listing_address || conv.context_listing_title || null
+                  : conv.context_type === "contractor"
+                  ? "Contractor conversation"
                   : null;
                 return (
                   <Link
@@ -119,7 +124,21 @@ export default function MessagesPage() {
                     className="block rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                          {otherParticipant?.profile_picture_url ? (
+                            <img
+                              src={otherParticipant.profile_picture_url}
+                              alt={otherParticipant.display_name || "User profile"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-sm font-semibold">
+                              {(otherParticipant?.display_name || "U").charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-slate-900 truncate">
                             {title}
@@ -138,6 +157,7 @@ export default function MessagesPage() {
                         <p className="mt-1 text-xs text-slate-500 truncate">
                           {conv.last_message_preview || "No messages yet"}
                         </p>
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className="text-[11px] text-slate-400">

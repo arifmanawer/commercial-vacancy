@@ -16,6 +16,8 @@ export interface ConversationSummary {
   participants: {
     user_id: string;
     role: string | null;
+    display_name: string;
+    profile_picture_url: string | null;
   }[];
   unread_count: number;
 }

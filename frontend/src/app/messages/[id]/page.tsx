@@ -79,6 +79,19 @@ export default function ConversationPage() {
     (isLandlordInConversation || isRenterInConversation || isParticipantInConversation) &&
     latestOffer?.status !== "pending";
 
+  const otherParticipant = useMemo(() => {
+    if (!conversation || !user) return null;
+    return conversation.participants.find((p) => p.user_id !== user.id) ?? null;
+  }, [conversation, user]);
+
+  const conversationTitle = useMemo(() => {
+    if (otherParticipant?.display_name) return otherParticipant.display_name;
+    if (conversation?.context_listing_title) return conversation.context_listing_title;
+    if (conversation?.context_type === "listing") return "Listing conversation";
+    if (conversation?.context_type === "contractor") return "Contractor conversation";
+    return "Conversation";
+  }, [conversation, otherParticipant]);
+
   async function loadOfferHistory() {
     if (!id || !user) return;
     setOfferHistoryLoading(true);
@@ -323,15 +336,23 @@ export default function ConversationPage() {
         {conversation && (
           <div className="mt-2 bg-slate-50/80 border border-slate-200 rounded-2xl flex flex-col h-[70vh] overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div className="min-w-0">
+              <div className="min-w-0 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                  {otherParticipant?.profile_picture_url ? (
+                    <img
+                      src={otherParticipant.profile_picture_url}
+                      alt={otherParticipant.display_name || "User profile"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {(otherParticipant?.display_name || "U").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
                 <h1 className="text-base font-semibold text-slate-900 truncate">
-                  {conversation.context_listing_title
-                    ? conversation.context_listing_title
-                    : conversation.context_type === "listing"
-                    ? "Listing conversation"
-                    : conversation.context_type === "contractor"
-                    ? "Contractor conversation"
-                    : "Conversation"}
+                  {conversationTitle}
                 </h1>
                 {conversation.context_listing_address && (
                   <p className="text-xs text-slate-400 truncate">
@@ -341,6 +362,7 @@ export default function ConversationPage() {
                 <p className="text-xs text-slate-500 mt-0.5">
                   Your messages stay on the platform. Share contact details only if you&apos;re comfortable.
                 </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 {conversation.context_type === "listing" && canCreateOffer && (

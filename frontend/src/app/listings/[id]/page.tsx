@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabaseClient";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
 import { GoogleMap, Marker } from "@react-google-maps/api";
@@ -54,6 +54,7 @@ export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
 
   const [listing, setListing] = useState<ListingDetails | null>(null);
@@ -65,7 +66,7 @@ export default function ListingPage() {
   const [tourMessage, setTourMessage] = useState("");
   const [tourTime, setTourTime] = useState("");
   const [buyStart, setBuyStart] = useState("");
-  const [buyDuration, setBuyDuration] = useState("");
+  const [buyEnd, setBuyEnd] = useState("");
   const [submitting, setSubmitting] = useState<"tour" | "buy" | null>(null);
   const [startingConversation, setStartingConversation] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -162,6 +163,81 @@ export default function ListingPage() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const checkout = searchParams?.get("checkout");
+    const bookingId = searchParams?.get("bookingId");
+    const sessionId = searchParams?.get("session_id");
+    if (checkout !== "success" || !bookingId) return;
+    const userId = user?.id;
+    if (!userId) {
+      setFeedback("Payment completed. Sign in to see your reservation.");
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12; // ~24s at 2s interval
+
+    async function pollBooking(requestUserId: string) {
+      attempts += 1;
+      try {
+        const res = await fetch(`${getApiUrl()}/api/bookings/${bookingId}`, {
+          headers: {
+            "X-User-Id": requestUserId,
+          },
+        });
+        const json = (await res.json().catch(() => null)) as
+          | { success?: boolean; data?: { status?: string }; error?: string }
+          | null;
+
+        const status = json?.data?.status;
+        if (!cancelled && res.ok && json?.success && typeof status === "string") {
+          if (status === "reserved" || status === "active") {
+            setFeedback("Payment confirmed — your booking is reserved.");
+            router.replace(`/listings/${id}`);
+            return;
+          }
+          if (status === "payment_failed") {
+            setError("Payment failed. Please try again.");
+            router.replace(`/listings/${id}`);
+            return;
+          }
+          setFeedback("Payment received — confirming your reservation…");
+        }
+      } catch {
+        if (!cancelled) setFeedback("Payment received — confirming your reservation…");
+      }
+
+      if (!cancelled && attempts < maxAttempts) {
+        setTimeout(() => pollBooking(requestUserId), 2000);
+      } else if (!cancelled) {
+        setFeedback(
+          "Payment received — confirmation may take a moment. Check your renter dashboard for the latest status.",
+        );
+      }
+    }
+
+    setFeedback("Payment received — confirming your reservation…");
+    // Ask the backend to confirm the Checkout Session (fallback when webhooks can't reach local dev).
+    if (sessionId) {
+      fetch(`${getApiUrl()}/api/bookings/confirm-checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": userId,
+        },
+        body: JSON.stringify({ sessionId, bookingId }),
+      }).catch(() => null);
+    }
+
+    pollBooking(userId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, router, searchParams, user?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -271,17 +347,75 @@ export default function ListingPage() {
     return true;
   }
 
+  function computeDurationUnits(
+    start: Date,
+    end: Date,
+    rateType: ListingDetails["rate_type"],
+  ): number | null {
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+
+    const hourMs = 60 * 60 * 1000;
+    const dayMs = 24 * hourMs;
+
+    switch (rateType) {
+      case "hourly":
+        return Math.ceil((endMs - startMs) / hourMs);
+      case "daily":
+        return Math.ceil((endMs - startMs) / dayMs);
+      case "weekly":
+        return Math.ceil((endMs - startMs) / (7 * dayMs));
+      case "monthly": {
+        // Billable months are computed by rounding up partial months from start.
+        const monthsBase =
+          (end.getFullYear() - start.getFullYear()) * 12 +
+          (end.getMonth() - start.getMonth());
+        const addMonths = (d: Date, months: number) => {
+          const copy = new Date(d.getTime());
+          copy.setMonth(copy.getMonth() + months);
+          return copy;
+        };
+        let months = Math.max(0, monthsBase);
+        if (addMonths(start, months).getTime() < endMs) months += 1;
+        return Math.max(1, months);
+      }
+      default:
+        return null;
+    }
+  }
+
   async function buyNow() {
     if (!listing || !id) return;
     if (!ensureAuthenticated("buy") || !user) return;
 
-    const duration = Number(buyDuration);
+    if (!listing.rate_type) {
+      setError("This listing is missing pricing information.");
+      return;
+    }
+
     if (!buyStart) {
       setError("Please choose a start date and time.");
       return;
     }
-    if (!Number.isFinite(duration) || duration <= 0) {
-      setError("Please enter a valid duration.");
+    if (!buyEnd) {
+      setError("Please choose an end date and time.");
+      return;
+    }
+
+    const start = new Date(buyStart);
+    const end = new Date(buyEnd);
+    const durationUnits = computeDurationUnits(start, end, listing.rate_type);
+    if (!durationUnits) {
+      setError("Please choose a valid start/end time window.");
+      return;
+    }
+    if (listing.min_duration != null && durationUnits < listing.min_duration) {
+      setError(`Duration must be at least ${listing.min_duration} ${listing.rate_type}.`);
+      return;
+    }
+    if (listing.max_duration != null && durationUnits > listing.max_duration) {
+      setError(`Duration must be at most ${listing.max_duration} ${listing.rate_type}.`);
       return;
     }
 
@@ -298,8 +432,8 @@ export default function ListingPage() {
         },
         body: JSON.stringify({
           listingId: listing.id,
-          startDate: buyStart,
-          duration,
+          startDate: start.toISOString(),
+          endDate: end.toISOString(),
         }),
       });
 
@@ -679,21 +813,28 @@ export default function ListingPage() {
                         />
                       </label>
                       <label className="block text-xs font-medium text-slate-600">
-                        Duration ({listing.rate_type ?? "units"})
+                        End date &amp; time
                         <input
-                          type="number"
-                          min={listing.min_duration ?? 1}
-                          max={listing.max_duration ?? undefined}
+                          type="datetime-local"
                           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          value={buyDuration}
-                          onChange={(e) => setBuyDuration(e.target.value)}
-                          placeholder={
-                            listing.min_duration != null && listing.max_duration != null
-                              ? `${listing.min_duration}-${listing.max_duration}`
-                              : "Enter duration"
-                          }
+                          value={buyEnd}
+                          onChange={(e) => setBuyEnd(e.target.value)}
                         />
                       </label>
+                      {listing.rate_type && buyStart && buyEnd && (() => {
+                        const durationUnits = computeDurationUnits(
+                          new Date(buyStart),
+                          new Date(buyEnd),
+                          listing.rate_type,
+                        );
+                        if (!durationUnits) return null;
+                        return (
+                          <p className="text-[11px] text-slate-500">
+                            Billable duration: <span className="font-medium">{durationUnits}</span>{" "}
+                            {listing.rate_type}
+                          </p>
+                        );
+                      })()}
                     </div>
                     <button
                       className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"

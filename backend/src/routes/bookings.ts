@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
 import { requireStripe } from '../lib/stripe';
 import { config } from '../config/env';
+import { sendReservationEmails } from '../services/reservationEmails';
 
 const router = Router();
 
@@ -771,6 +772,14 @@ router.post<
       .from('offers')
       .update({ status: 'accepted' } as any)
       .eq('id', booking.offer_id);
+
+    // Best-effort side effect: reservation emails. Idempotency is enforced in DB.
+    sendReservationEmails(booking.id).catch((err: any) => {
+      console.warn('Failed to send reservation emails after confirm-checkout', {
+        bookingId: booking.id,
+        error: err?.message ?? String(err),
+      });
+    });
 
     logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, true);
     res.status(200).json({ success: true, data: { bookingId: booking.id, status: 'reserved' } });

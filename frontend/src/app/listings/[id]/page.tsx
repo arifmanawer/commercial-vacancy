@@ -367,7 +367,6 @@ export default function ListingPage() {
       case "weekly":
         return Math.ceil((endMs - startMs) / (7 * dayMs));
       case "monthly": {
-        // Billable months are computed by rounding up partial months from start.
         const monthsBase =
           (end.getFullYear() - start.getFullYear()) * 12 +
           (end.getMonth() - start.getMonth());
@@ -393,7 +392,6 @@ export default function ListingPage() {
       setError("This listing is missing pricing information.");
       return;
     }
-
     if (!buyStart) {
       setError("Please choose a start date and time.");
       return;

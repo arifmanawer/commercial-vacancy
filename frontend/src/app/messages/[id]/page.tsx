@@ -526,19 +526,39 @@ export default function ConversationPage() {
 
               {messages.map((msg) => {
                 const isSelf = msg.sender_id === user?.id;
+                const senderLabel = isSelf
+                  ? "You"
+                  : otherParticipant?.display_name || "Other user";
                 return (
                   <div
                     key={msg.id}
                     className={`flex ${isSelf ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                         isSelf
-                          ? "bg-[var(--brand)] text-white rounded-br-sm"
-                          : "bg-white text-slate-900 rounded-bl-sm border border-slate-200/80"
+                          ? "bg-[var(--brand)] text-white rounded-br-sm border border-[var(--brand-dark)]/50"
+                          : "bg-white text-slate-900 rounded-bl-sm border border-slate-300"
                       }`}
                     >
+                      <p
+                        className={`mb-1 text-[11px] font-semibold ${
+                          isSelf ? "text-white/90" : "text-slate-500"
+                        }`}
+                      >
+                        {senderLabel}
+                      </p>
                       <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                      <p
+                        className={`mt-1 text-[10px] ${
+                          isSelf ? "text-white/75" : "text-slate-400"
+                        }`}
+                      >
+                        {new Date(msg.created_at).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
                     </div>
                   </div>
                 );

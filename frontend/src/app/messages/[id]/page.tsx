@@ -274,14 +274,26 @@ export default function ConversationPage() {
         },
       });
       const json = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | {
+            success?: boolean;
+            data?: { checkoutUrl?: string | null; action?: "checkout" | "notified"; message?: string };
+            error?: string;
+          }
         | null;
       if (!res.ok || !json?.success) {
         throw new Error(json?.error || `Failed to ${action} offer`);
       }
+      if (action === "accept" && json.data?.checkoutUrl) {
+        window.location.href = json.data.checkoutUrl;
+        return;
+      }
       await refreshConversation();
       await loadOfferHistory();
-      toast(`Offer ${action}ed.`, "success");
+      if (action === "accept" && json.data?.action === "notified") {
+        toast(json.data.message || "Offer accepted. Checkout request sent.", "success");
+      } else {
+        toast(`Offer ${action}ed.`, "success");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : `Failed to ${action} offer`;
       toast(msg, "error");

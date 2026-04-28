@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
 import { requireStripe } from '../lib/stripe';
 import { computeOfferAmounts } from '../lib/offerPricing';
+import { config } from '../config/env';
 
 const router = Router();
 
@@ -392,6 +393,45 @@ router.post<
       return;
     }
 
+    // Keep offer creation visible in chat and move the thread to the top of the
+    // conversations list when a renter/non-owner creates an offer.
+    if (!isLandlord) {
+      const offerNotice = 'Sent an offer. Review details above.';
+      const { error: messageInsertError } = await supabaseAdmin.from('messages').insert({
+        conversation_id: conversationId,
+        sender_id: userId,
+        body: offerNotice,
+      });
+
+      if (messageInsertError) {
+        logOffersApi(
+          'POST',
+          '/api/offers',
+          userId,
+          false,
+          `Offer created but notification message failed: ${messageInsertError.message}`
+        );
+      }
+
+      const { error: conversationUpdateError } = await supabaseAdmin
+        .from('conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: offerNotice.slice(0, 280),
+        } as Partial<ConversationRow>)
+        .eq('id', conversationId);
+
+      if (conversationUpdateError) {
+        logOffersApi(
+          'POST',
+          '/api/offers',
+          userId,
+          false,
+          `Offer created but conversation preview update failed: ${conversationUpdateError.message}`
+        );
+      }
+    }
+
     logOffersApi('POST', '/api/offers', userId, true);
     res.status(201).json({ success: true, data: inserted as OfferRow });
   })
@@ -773,7 +813,13 @@ router.post<{ id: string }, ApiResponse<OfferRow> | ApiResponse>(
  */
 router.post<
   { id: string },
-  ApiResponse<{ booking: BookingRow; clientSecret: string | null }> | ApiResponse
+  ApiResponse<{
+    booking: BookingRow | null;
+    checkoutUrl: string | null;
+    action: 'checkout' | 'notified';
+    message: string;
+    nextOffer?: OfferRow;
+  }> | ApiResponse
 >(
   '/:id/accept',
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
@@ -852,6 +898,102 @@ router.post<
       res.status(400).json({
         success: false,
         error: 'This offer already has an associated booking',
+      });
+      return;
+    }
+
+    const isOwnerAccepting = userId === o.landlord_id;
+
+    if (isOwnerAccepting) {
+      const { data: markedAccepted, error: markAcceptedError } = await supabaseAdmin
+        .from('offers')
+        .update({ status: 'accepted' } as Partial<OfferRow>)
+        .eq('id', o.id)
+        .eq('status', 'pending')
+        .select(OFFER_SELECT)
+        .maybeSingle();
+
+      if (markAcceptedError) {
+        logOffersApi('POST', '/api/offers/:id/accept', userId, false, markAcceptedError.message);
+        res.status(500).json({ success: false, error: 'Failed to accept offer terms' });
+        return;
+      }
+
+      if (!markedAccepted) {
+        res.status(409).json({
+          success: false,
+          error: 'Offer is no longer pending',
+        });
+        return;
+      }
+
+      const {
+        data: followUpOffer,
+        error: followUpOfferError,
+      } = await supabaseAdmin
+        .from('offers')
+        .insert({
+          conversation_id: o.conversation_id,
+          listing_id: o.listing_id,
+          landlord_id: o.landlord_id,
+          renter_id: o.renter_id,
+          parent_offer_id: o.id,
+          created_by: o.landlord_id,
+          rate_type: o.rate_type,
+          rate_amount: o.rate_amount,
+          currency: o.currency,
+          start_date: o.start_date,
+          duration: o.duration,
+          subtotal_amount: o.subtotal_amount,
+          platform_fee_amount: o.platform_fee_amount,
+          total_amount: o.total_amount,
+          notes: o.notes,
+        } as Partial<OfferRow>)
+        .select(OFFER_SELECT)
+        .single();
+
+      if (followUpOfferError || !followUpOffer) {
+        await supabaseAdmin
+          .from('offers')
+          .update({ status: 'pending' } as Partial<OfferRow>)
+          .eq('id', o.id)
+          .eq('status', 'accepted');
+        logOffersApi(
+          'POST',
+          '/api/offers/:id/accept',
+          userId,
+          false,
+          followUpOfferError?.message
+        );
+        res.status(500).json({ success: false, error: 'Failed to create payment request offer' });
+        return;
+      }
+
+      const landlordNotice =
+        'Offer accepted by landlord. Please complete checkout to finalize this booking.';
+      await supabaseAdmin.from('messages').insert({
+        conversation_id: o.conversation_id,
+        sender_id: o.landlord_id,
+        body: landlordNotice,
+      });
+      await supabaseAdmin
+        .from('conversations')
+        .update({
+          last_message_at: new Date().toISOString(),
+          last_message_preview: landlordNotice.slice(0, 280),
+        })
+        .eq('id', o.conversation_id);
+
+      logOffersApi('POST', '/api/offers/:id/accept', userId, true);
+      res.status(201).json({
+        success: true,
+        data: {
+          booking: null,
+          checkoutUrl: null,
+          action: 'notified',
+          message: 'Offer accepted. A payment request was sent to the renter.',
+          nextOffer: followUpOffer as OfferRow,
+        },
       });
       return;
     }
@@ -950,58 +1092,82 @@ router.post<
 
     try {
       const stripe = requireStripe();
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: o.total_amount,
-        currency: o.currency,
-        capture_method: 'manual',
-        application_fee_amount: o.platform_fee_amount,
-        transfer_data: {
-          destination: landlordProfile.stripe_account_id as string,
+      const currency = (o.currency || 'usd').toLowerCase();
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        success_url: `${config.frontendUrl}/messages/${o.conversation_id}?checkout=success`,
+        cancel_url: `${config.frontendUrl}/messages/${o.conversation_id}?checkout=cancelled`,
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency,
+              unit_amount: o.total_amount,
+              product_data: {
+                name: `Offer booking (${o.rate_type})`,
+                description: `Duration: ${o.duration} ${o.rate_type}`,
+              },
+            },
+          },
+        ],
+        payment_intent_data: {
+          application_fee_amount: o.platform_fee_amount,
+          transfer_data: {
+            destination: landlordProfile.stripe_account_id as string,
+          },
+          metadata: {
+            booking_id: booking.id,
+            offer_id: booking.offer_id,
+            listing_id: booking.listing_id,
+            renter_id: booking.renter_id,
+            landlord_id: booking.landlord_id,
+            flow: 'offer_accept',
+          },
         },
         metadata: {
-          offer_id: o.id,
           booking_id: booking.id,
-          listing_id: o.listing_id,
-          landlord_id: o.landlord_id,
-          renter_id: o.renter_id,
         },
       });
 
-      const {
-        data: updatedBooking,
-        error: updateBookingError,
-      } = await supabaseAdmin
-        .from('bookings')
-        .update({
-          payment_intent_id: paymentIntent.id,
-        } as Partial<BookingRow>)
-        .eq('id', booking.id)
-        .select(
-          'id, offer_id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, payment_intent_id, currency, total_amount, platform_fee_amount, landlord_amount, cancelled_at, cancellation_reason, refund_amount, created_at, updated_at'
-        )
-        .single();
+      let sessionToUse = session;
+      if (!sessionToUse.url) {
+        try {
+          const retrieved = await stripe.checkout.sessions.retrieve(session.id);
+          sessionToUse = retrieved;
+        } catch (_err) {
+          // no-op: handled by url check below
+        }
+      }
 
-      if (updateBookingError || !updatedBooking) {
-        logOffersApi(
-          'POST',
-          '/api/offers/:id/accept',
-          userId,
-          false,
-          updateBookingError?.message
-        );
-        res.status(500).json({
-          success: false,
-          error: 'Failed to link payment intent to booking',
-        });
-        return;
+      if (!sessionToUse.url) {
+        throw new Error('Stripe checkout session did not return a URL');
+      }
+
+      const paymentIntentId =
+        sessionToUse.payment_intent && typeof sessionToUse.payment_intent === 'string'
+          ? sessionToUse.payment_intent
+          : sessionToUse.payment_intent && typeof sessionToUse.payment_intent === 'object'
+            ? (sessionToUse.payment_intent as any).id
+            : null;
+
+      if (paymentIntentId) {
+        await supabaseAdmin
+          .from('bookings')
+          .update({ payment_intent_id: paymentIntentId } as Partial<BookingRow>)
+          .eq('id', booking.id);
       }
 
       logOffersApi('POST', '/api/offers/:id/accept', userId, true);
       res.status(201).json({
         success: true,
         data: {
-          booking: updatedBooking,
-          clientSecret: paymentIntent.client_secret ?? null,
+          booking: {
+            ...booking,
+            payment_intent_id: paymentIntentId,
+          } as BookingRow,
+          checkoutUrl: sessionToUse.url,
+          action: 'checkout',
+          message: 'Checkout created successfully.',
         },
       });
     } catch (err: unknown) {

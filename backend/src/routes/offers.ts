@@ -1121,11 +1121,15 @@ router.post<
             listing_id: booking.listing_id,
             renter_id: booking.renter_id,
             landlord_id: booking.landlord_id,
+            start_datetime: booking.start_datetime,
+            end_datetime: booking.end_datetime,
             flow: 'offer_accept',
           },
         },
         metadata: {
           booking_id: booking.id,
+          start_datetime: booking.start_datetime,
+          end_datetime: booking.end_datetime,
         },
       });
 

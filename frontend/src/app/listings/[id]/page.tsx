@@ -860,6 +860,12 @@ export default function ListingPage() {
                         ? "Opening chat..."
                         : "Contact Landlord"}
                   </button>
+                  <Link
+                    href={`/assistant?listingId=${listing.id}`}
+                    className="w-full inline-flex items-center justify-center bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                  >
+                    Ask Assistant about this listing
+                  </Link>
                   <button
                     className="w-full bg-white text-slate-700 border border-slate-300 py-3 px-4 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                     onClick={() => {

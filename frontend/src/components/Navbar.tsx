@@ -11,6 +11,7 @@ import { useConversations } from "@/hooks/useConversations";
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/browse", label: "Browse" },
+  { href: "/assistant", label: "Assistant" },
   { href: "/list", label: "List Space" },
   { href: "/how-it-works", label: "How It Works" },
   { href: "/about", label: "About" },
@@ -72,6 +73,12 @@ export default function Navbar() {
               className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
             >
               Browse Spaces
+            </Link>
+            <Link
+              href="/assistant"
+              className="text-sm text-slate-700 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 rounded"
+            >
+              Assistant
             </Link>
             {!loading && isLandlord && (
               <>

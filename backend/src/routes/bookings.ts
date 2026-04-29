@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
 import { requireStripe } from '../lib/stripe';
 import { config } from '../config/env';
+import { sendReservationEmails } from '../services/reservationEmails';
 
 const router = Router();
 
@@ -86,24 +87,36 @@ function getUserId(req: Request): string | null {
   return id || null;
 }
 
-function computeEndDate(start: Date, rateType: string, duration: number): Date {
-  const end = new Date(start.getTime());
+function computeDurationUnits(start: Date, end: Date, rateType: string): number | null {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+
+  const hourMs = 60 * 60 * 1000;
+  const dayMs = 24 * hourMs;
+
   switch (rateType) {
     case 'hourly':
-      end.setHours(end.getHours() + duration);
-      break;
-    case 'weekly':
-      end.setDate(end.getDate() + duration * 7);
-      break;
-    case 'monthly':
-      end.setMonth(end.getMonth() + duration);
-      break;
+      return Math.ceil((endMs - startMs) / hourMs);
     case 'daily':
+      return Math.ceil((endMs - startMs) / dayMs);
+    case 'weekly':
+      return Math.ceil((endMs - startMs) / (7 * dayMs));
+    case 'monthly': {
+      const monthsBase =
+        (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+      const addMonths = (d: Date, months: number) => {
+        const copy = new Date(d.getTime());
+        copy.setMonth(copy.getMonth() + months);
+        return copy;
+      };
+      let months = Math.max(0, monthsBase);
+      if (addMonths(start, months).getTime() < endMs) months += 1;
+      return Math.max(1, months);
+    }
     default:
-      end.setDate(end.getDate() + duration);
-      break;
+      return null;
   }
-  return end;
 }
 
 function calculateRefundPercentage(start: Date, now: Date): number {
@@ -140,7 +153,12 @@ function calculateRefundPercentage(start: Date, now: Date): number {
 router.post<
   {},
   ApiResponse<{ booking: BookingRow; checkoutUrl: string }> | ApiResponse,
-  { listingId: string; startDate: string; duration: number; platformFeePercent?: number }
+  {
+    listingId: string;
+    startDate: string;
+    endDate: string;
+    platformFeePercent?: number;
+  }
 >(
   '/buy-now',
   asyncHandler(async (req: Request, res: Response) => {
@@ -154,17 +172,12 @@ router.post<
       return;
     }
 
-    const { listingId, startDate, duration, platformFeePercent } = req.body;
-    if (!listingId || !startDate || !duration) {
+    const { listingId, startDate, endDate, platformFeePercent } = req.body;
+    if (!listingId || !startDate || !endDate) {
       res.status(400).json({
         success: false,
-        error: 'listingId, startDate, and duration are required',
+        error: 'listingId, startDate, and endDate are required',
       });
-      return;
-    }
-
-    if (!Number.isFinite(duration) || duration <= 0) {
-      res.status(400).json({ success: false, error: 'duration must be greater than zero' });
       return;
     }
 
@@ -197,6 +210,32 @@ router.post<
       res.status(400).json({ success: false, error: 'Landlord cannot buy own listing' });
       return;
     }
+
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) {
+      res.status(400).json({ success: false, error: 'Invalid startDate' });
+      return;
+    }
+    if (start.getTime() <= Date.now()) {
+      res.status(400).json({ success: false, error: 'startDate must be in the future' });
+      return;
+    }
+
+    const end = new Date(endDate);
+    if (Number.isNaN(end.getTime())) {
+      res.status(400).json({ success: false, error: 'Invalid endDate' });
+      return;
+    }
+    if (end <= start) {
+      res.status(400).json({ success: false, error: 'endDate must be after startDate' });
+      return;
+    }
+
+    const duration = computeDurationUnits(start, end, listing.rate_type);
+    if (!duration) {
+      res.status(400).json({ success: false, error: 'Invalid booking window for rate type' });
+      return;
+    }
     if (listing.min_duration != null && duration < listing.min_duration) {
       res.status(400).json({
         success: false,
@@ -209,22 +248,6 @@ router.post<
         success: false,
         error: `Duration must be at most ${listing.max_duration}`,
       });
-      return;
-    }
-
-    const start = new Date(startDate);
-    if (Number.isNaN(start.getTime())) {
-      res.status(400).json({ success: false, error: 'Invalid startDate' });
-      return;
-    }
-    if (start.getTime() <= Date.now()) {
-      res.status(400).json({ success: false, error: 'startDate must be in the future' });
-      return;
-    }
-
-    const end = computeEndDate(start, listing.rate_type, duration);
-    if (Number.isNaN(end.getTime()) || end <= start) {
-      res.status(400).json({ success: false, error: 'Invalid booking duration or rate type' });
       return;
     }
 
@@ -369,6 +392,76 @@ router.post<
       conversationId = createdConversation.id;
     }
 
+    // This conversation can only have one pending offer (partial unique index).
+    // If a previous buy-now attempt created a pending offer/booking but never made it to
+    // `reserved`, we remove it so the renter can try again.
+    //
+    // We prefer deleting stale pending offers, but if for any reason a pending offer has an
+    // already-reserved booking (shouldn't happen), we at least cancel it to clear the unique
+    // constraint and keep the history.
+    const { data: pendingOffers, error: pendingOffersError } = await supabaseAdmin
+      .from('offers')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('status', 'pending');
+
+    if (pendingOffersError) {
+      logBookingsApi('POST', '/api/bookings/buy-now', userId, false, pendingOffersError.message);
+      res.status(500).json({ success: false, error: 'Failed to validate prior offers' });
+      return;
+    }
+
+    if (pendingOffers && pendingOffers.length > 0) {
+      const pendingOfferIds = pendingOffers.map((o) => o.id);
+
+      const { data: relatedBookings, error: relatedBookingsError } = await supabaseAdmin
+        .from('bookings')
+        .select('id, offer_id, status')
+        .in('offer_id', pendingOfferIds);
+
+      if (relatedBookingsError) {
+        logBookingsApi('POST', '/api/bookings/buy-now', userId, false, relatedBookingsError.message);
+        res.status(500).json({ success: false, error: 'Failed to validate prior bookings' });
+        return;
+      }
+
+      const keepOfferIds = new Set(
+        (relatedBookings ?? [])
+          .filter((b) => b.status === 'reserved' || b.status === 'active' || b.status === 'completed')
+          .map((b) => b.offer_id)
+      );
+
+      const deletableOfferIds = pendingOfferIds.filter((id) => !keepOfferIds.has(id));
+      const nonDeletableOfferIds = pendingOfferIds.filter((id) => keepOfferIds.has(id));
+
+      if (deletableOfferIds.length > 0) {
+        const { error: deleteError } = await supabaseAdmin
+          .from('offers')
+          .delete()
+          .in('id', deletableOfferIds);
+
+        if (deleteError) {
+          logBookingsApi('POST', '/api/bookings/buy-now', userId, false, deleteError.message);
+          res.status(500).json({ success: false, error: 'Failed to delete prior pending offer' });
+          return;
+        }
+      }
+
+      if (nonDeletableOfferIds.length > 0) {
+        const { error: cancelError } = await supabaseAdmin
+          .from('offers')
+          .update({ status: 'cancelled' } as any)
+          .in('id', nonDeletableOfferIds)
+          .eq('status', 'pending');
+
+        if (cancelError) {
+          logBookingsApi('POST', '/api/bookings/buy-now', userId, false, cancelError.message);
+          res.status(500).json({ success: false, error: 'Failed to cancel prior pending offer' });
+          return;
+        }
+      }
+    }
+
     const { data: insertedOffer, error: offerError } = await supabaseAdmin
       .from('offers')
       .insert({
@@ -426,7 +519,8 @@ router.post<
       const stripe = requireStripe();
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
-        success_url: `${config.frontendUrl}/listings/${listing.id}?checkout=success`,
+        // Include bookingId and session_id so the frontend can confirm status if the webhook is delayed.
+        success_url: `${config.frontendUrl}/listings/${listing.id}?checkout=success&bookingId=${booking.id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${config.frontendUrl}/listings/${listing.id}?checkout=cancelled`,
         line_items: [
           {
@@ -436,7 +530,7 @@ router.post<
               unit_amount: total,
               product_data: {
                 name: `Listing booking (${listing.rate_type})`,
-                description: `Duration: ${duration} ${listing.rate_type}`,
+                description: `Start: ${start.toISOString()} · End: ${end.toISOString()} · Duration: ${duration} ${listing.rate_type}`,
               },
             },
           },
@@ -453,10 +547,16 @@ router.post<
             renter_id: booking.renter_id,
             landlord_id: booking.landlord_id,
             flow: 'buy_now',
+            start_datetime: start.toISOString(),
+            end_datetime: end.toISOString(),
+            duration_units: String(duration),
+            rate_type: listing.rate_type,
           },
         },
         metadata: {
           booking_id: booking.id,
+          start_datetime: start.toISOString(),
+          end_datetime: end.toISOString(),
         },
       });
 
@@ -539,6 +639,202 @@ router.post<
         error: 'Failed to initialize Stripe checkout',
       });
     }
+  })
+);
+
+/**
+ * POST /api/bookings/confirm-checkout
+ *
+ * Fallback for environments where Stripe webhooks are delayed/unavailable.
+ * Given a Checkout Session id, verifies payment status with Stripe and, if paid,
+ * marks the booking reserved + offer accepted.
+ */
+router.post<
+  {},
+  ApiResponse<{ bookingId: string; status: BookingStatus }> | ApiResponse,
+  { sessionId: string; bookingId?: string }
+>(
+  '/confirm-checkout',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      logBookingsApi('POST', '/api/bookings/confirm-checkout', undefined, false, 'Missing user_id');
+      res.status(400).json({
+        success: false,
+        error: 'Missing user_id (X-User-Id header or user_id query param)',
+      });
+      return;
+    }
+
+    const sessionId = req.body?.sessionId?.trim();
+    const bookingIdHint = req.body?.bookingId?.trim() || null;
+    if (!sessionId) {
+      res.status(400).json({ success: false, error: 'sessionId is required' });
+      return;
+    }
+
+    const stripe = requireStripe();
+    let session: any;
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ['payment_intent'],
+      });
+    } catch (err: any) {
+      logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, false, err?.message);
+      res.status(502).json({ success: false, error: 'Failed to retrieve Stripe session' });
+      return;
+    }
+
+    const paymentStatus = String(session?.payment_status || '').toLowerCase();
+    const sessionStatus = String(session?.status || '').toLowerCase();
+    const isPaid =
+      paymentStatus === 'paid' ||
+      sessionStatus === 'complete' ||
+      sessionStatus === 'completed';
+
+    if (!isPaid) {
+      res.status(200).json({
+        success: true,
+        data: {
+          bookingId: bookingIdHint || (session?.metadata?.booking_id as string) || 'unknown',
+          status: 'pending_payment',
+        },
+      });
+      return;
+    }
+
+    const paymentIntentId =
+      session?.payment_intent && typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session?.payment_intent && typeof session.payment_intent === 'object'
+          ? session.payment_intent.id
+          : null;
+
+    const bookingIdFromMetadata =
+      (session?.metadata?.booking_id as string | undefined) ||
+      (session?.metadata?.bookingId as string | undefined) ||
+      (session?.payment_intent?.metadata?.booking_id as string | undefined) ||
+      (session?.payment_intent?.metadata?.bookingId as string | undefined) ||
+      null;
+
+    const bookingId = bookingIdHint || bookingIdFromMetadata;
+    if (!bookingId) {
+      logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, false, 'Missing bookingId');
+      res.status(400).json({ success: false, error: 'Unable to resolve bookingId from session' });
+      return;
+    }
+
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from('bookings')
+      .select('id, offer_id, renter_id, landlord_id, status, payment_intent_id')
+      .eq('id', bookingId)
+      .maybeSingle();
+
+    if (bookingError) {
+      logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, false, bookingError.message);
+      res.status(500).json({ success: false, error: 'Failed to load booking' });
+      return;
+    }
+    if (!booking) {
+      res.status(404).json({ success: false, error: 'Booking not found' });
+      return;
+    }
+    if (booking.renter_id !== userId && booking.landlord_id !== userId) {
+      res.status(403).json({ success: false, error: 'Not authorized to confirm this booking' });
+      return;
+    }
+
+    if (booking.status !== 'pending_payment') {
+      res.status(200).json({ success: true, data: { bookingId: booking.id, status: booking.status } });
+      return;
+    }
+
+    if (paymentIntentId && !booking.payment_intent_id) {
+      await supabaseAdmin
+        .from('bookings')
+        .update({ payment_intent_id: paymentIntentId } as Partial<BookingRow>)
+        .eq('id', booking.id);
+    }
+
+    const { error: reserveError } = await supabaseAdmin
+      .from('bookings')
+      .update({ status: 'reserved' } as Partial<BookingRow>)
+      .eq('id', booking.id)
+      .eq('status', 'pending_payment');
+
+    if (reserveError) {
+      logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, false, reserveError.message);
+      res.status(500).json({ success: false, error: 'Failed to mark booking reserved' });
+      return;
+    }
+
+    await supabaseAdmin
+      .from('offers')
+      .update({ status: 'accepted' } as any)
+      .eq('id', booking.offer_id);
+
+    // Best-effort side effect: reservation emails. Idempotency is enforced in DB.
+    sendReservationEmails(booking.id).catch((err: any) => {
+      console.warn('Failed to send reservation emails after confirm-checkout', {
+        bookingId: booking.id,
+        error: err?.message ?? String(err),
+      });
+    });
+
+    logBookingsApi('POST', '/api/bookings/confirm-checkout', userId, true);
+    res.status(200).json({ success: true, data: { bookingId: booking.id, status: 'reserved' } });
+  })
+);
+
+/**
+ * GET /api/bookings/:id
+ *
+ * Fetch a booking by id for the renter or landlord.
+ */
+router.get<
+  { id: string },
+  ApiResponse<BookingRow> | ApiResponse
+>(
+  '/:id',
+  asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+    const userId = getUserId(req);
+    const { id } = req.params;
+
+    if (!userId) {
+      logBookingsApi('GET', '/api/bookings/:id', undefined, false, 'Missing user_id');
+      res.status(400).json({
+        success: false,
+        error: 'Missing user_id (X-User-Id header or user_id query param)',
+      });
+      return;
+    }
+
+    const { data: booking, error } = await supabaseAdmin
+      .from('bookings')
+      .select(
+        'id, offer_id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, payment_intent_id, currency, total_amount, platform_fee_amount, landlord_amount, refund_amount, cancellation_reason, cancelled_at'
+      )
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      logBookingsApi('GET', '/api/bookings/:id', userId, false, error.message);
+      res.status(500).json({ success: false, error: 'Failed to load booking' });
+      return;
+    }
+
+    if (!booking) {
+      res.status(404).json({ success: false, error: 'Booking not found' });
+      return;
+    }
+
+    if (booking.renter_id !== userId && booking.landlord_id !== userId) {
+      res.status(403).json({ success: false, error: 'Not authorized to view this booking' });
+      return;
+    }
+
+    logBookingsApi('GET', '/api/bookings/:id', userId, true);
+    res.status(200).json({ success: true, data: booking as BookingRow });
   })
 );
 

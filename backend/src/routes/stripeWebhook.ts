@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type Stripe from 'stripe';
 import { requireStripe } from '../lib/stripe';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { sendReservationEmails } from '../services/reservationEmails';
 
 type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled' | 'countered';
 
@@ -69,6 +70,16 @@ async function markBookingReservedAndOfferAccepted(booking: BookingRow) {
     logStripeWebhook('Failed to update offer to accepted', {
       offerId: updatedBooking.offer_id,
       error: offerUpdateError.message,
+    });
+  }
+
+  // Best-effort side effect: email confirmations. Never fail the webhook for email issues.
+  try {
+    await sendReservationEmails(updatedBooking.id);
+  } catch (err: any) {
+    logStripeWebhook('Failed to send reservation emails', {
+      bookingId: updatedBooking.id,
+      error: err?.message ?? String(err),
     });
   }
 }

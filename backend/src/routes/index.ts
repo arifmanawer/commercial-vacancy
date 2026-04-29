@@ -9,6 +9,7 @@ import messageRoutes from './messages';
 import stripeConnectRoutes from './stripeConnect';
 import offerRoutes from './offers';
 import bookingRoutes from './bookings';
+import devRoutes from './dev';
 
 const router = Router();
 
@@ -22,6 +23,9 @@ router.use('/contractor-jobs', contractorJobsRoutes);
 router.use('/stripe', stripeConnectRoutes);
 router.use('/offers', offerRoutes);
 router.use('/bookings', bookingRoutes);
+
+// Dev-only testing routes (hidden in production)
+router.use('/dev', devRoutes);
 
 // Default API info route
 router.get('/', (_req, res) => {

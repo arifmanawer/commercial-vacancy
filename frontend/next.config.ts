@@ -9,7 +9,7 @@ if (apiUrlForBuild) {
   );
 } else {
   console.warn(
-    "[build] NEXT_PUBLIC_API_URL is not set. Production will fall back to same host :5000 (usually wrong on Render); set it in your host’s env and rebuild."
+    "[build] NEXT_PUBLIC_API_URL is not set. Client requests will use relative `/api/...` (requires a proxy/rewrite). Set it in your host’s env and rebuild."
   );
 }
 

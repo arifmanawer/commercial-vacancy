@@ -79,6 +79,19 @@ export default function ConversationPage() {
     (isLandlordInConversation || isRenterInConversation || isParticipantInConversation) &&
     latestOffer?.status !== "pending";
 
+  const otherParticipant = useMemo(() => {
+    if (!conversation || !user) return null;
+    return conversation.participants.find((p) => p.user_id !== user.id) ?? null;
+  }, [conversation, user]);
+
+  const conversationTitle = useMemo(() => {
+    if (otherParticipant?.display_name) return otherParticipant.display_name;
+    if (conversation?.context_listing_title) return conversation.context_listing_title;
+    if (conversation?.context_type === "listing") return "Listing conversation";
+    if (conversation?.context_type === "contractor") return "Contractor conversation";
+    return "Conversation";
+  }, [conversation, otherParticipant]);
+
   async function loadOfferHistory() {
     if (!id || !user) return;
     setOfferHistoryLoading(true);
@@ -261,14 +274,26 @@ export default function ConversationPage() {
         },
       });
       const json = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | {
+            success?: boolean;
+            data?: { checkoutUrl?: string | null; action?: "checkout" | "notified"; message?: string };
+            error?: string;
+          }
         | null;
       if (!res.ok || !json?.success) {
         throw new Error(json?.error || `Failed to ${action} offer`);
       }
+      if (action === "accept" && json.data?.checkoutUrl) {
+        window.location.href = json.data.checkoutUrl;
+        return;
+      }
       await refreshConversation();
       await loadOfferHistory();
-      toast(`Offer ${action}ed.`, "success");
+      if (action === "accept" && json.data?.action === "notified") {
+        toast(json.data.message || "Offer accepted. Checkout request sent.", "success");
+      } else {
+        toast(`Offer ${action}ed.`, "success");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : `Failed to ${action} offer`;
       toast(msg, "error");
@@ -323,15 +348,23 @@ export default function ConversationPage() {
         {conversation && (
           <div className="mt-2 bg-slate-50/80 border border-slate-200 rounded-2xl flex flex-col h-[70vh] overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <div className="min-w-0">
+              <div className="min-w-0 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                  {otherParticipant?.profile_picture_url ? (
+                    <img
+                      src={otherParticipant.profile_picture_url}
+                      alt={otherParticipant.display_name || "User profile"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {(otherParticipant?.display_name || "U").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
                 <h1 className="text-base font-semibold text-slate-900 truncate">
-                  {conversation.context_listing_title
-                    ? conversation.context_listing_title
-                    : conversation.context_type === "listing"
-                    ? "Listing conversation"
-                    : conversation.context_type === "contractor"
-                    ? "Contractor conversation"
-                    : "Conversation"}
+                  {conversationTitle}
                 </h1>
                 {conversation.context_listing_address && (
                   <p className="text-xs text-slate-400 truncate">
@@ -341,6 +374,7 @@ export default function ConversationPage() {
                 <p className="text-xs text-slate-500 mt-0.5">
                   Your messages stay on the platform. Share contact details only if you&apos;re comfortable.
                 </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 {conversation.context_type === "listing" && canCreateOffer && (
@@ -492,19 +526,39 @@ export default function ConversationPage() {
 
               {messages.map((msg) => {
                 const isSelf = msg.sender_id === user?.id;
+                const senderLabel = isSelf
+                  ? "You"
+                  : otherParticipant?.display_name || "Other user";
                 return (
                   <div
                     key={msg.id}
                     className={`flex ${isSelf ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
                         isSelf
-                          ? "bg-[var(--brand)] text-white rounded-br-sm"
-                          : "bg-white text-slate-900 rounded-bl-sm border border-slate-200/80"
+                          ? "bg-[var(--brand)] text-white rounded-br-sm border border-[var(--brand-dark)]/50"
+                          : "bg-white text-slate-900 rounded-bl-sm border border-slate-300"
                       }`}
                     >
+                      <p
+                        className={`mb-1 text-[11px] font-semibold ${
+                          isSelf ? "text-white/90" : "text-slate-500"
+                        }`}
+                      >
+                        {senderLabel}
+                      </p>
                       <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                      <p
+                        className={`mt-1 text-[10px] ${
+                          isSelf ? "text-white/75" : "text-slate-400"
+                        }`}
+                      >
+                        {new Date(msg.created_at).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
                     </div>
                   </div>
                 );

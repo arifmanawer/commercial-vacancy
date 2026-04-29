@@ -47,6 +47,8 @@ interface ConversationSummary {
   participants: {
     user_id: string;
     role: string | null;
+    display_name: string;
+    profile_picture_url: string | null;
   }[];
   unread_count: number;
 }
@@ -65,6 +67,14 @@ interface MessageApiModel {
   sender_id: string;
   body: string;
   created_at: string;
+}
+
+interface ProfileBasic {
+  id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  profile_picture_url: string | null;
 }
 
 interface OfferActionabilityModel {
@@ -109,6 +119,30 @@ async function fetchListingMap(listingIds: string[]): Promise<Map<string, Listin
     map.set(row.id, row);
   }
   return map;
+}
+
+async function fetchProfileMap(userIds: string[]): Promise<Map<string, ProfileBasic>> {
+  const map = new Map<string, ProfileBasic>();
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (!unique.length) return map;
+
+  const { data } = await supabaseAdmin
+    .from('profiles')
+    .select('id, username, first_name, last_name, profile_picture_url')
+    .in('id', unique);
+
+  for (const row of data ?? []) {
+    map.set(row.id, row as ProfileBasic);
+  }
+  return map;
+}
+
+function profileDisplayName(profile?: ProfileBasic): string {
+  if (!profile) return 'Verified User';
+  const first = profile.first_name?.trim() ?? '';
+  const last = profile.last_name?.trim() ?? '';
+  const fullName = `${first} ${last}`.trim();
+  return fullName || profile.username?.trim() || 'Verified User';
 }
 
 function listingLabel(listing: ListingBasic | undefined): { title: string | null; address: string | null } {
@@ -226,6 +260,8 @@ router.get<
       .map((c) => c.context_listing_id)
       .filter((id): id is string => !!id);
     const listingMap = await fetchListingMap(listingIds);
+    const participantUserIds = (allParticipants ?? []).map((p) => p.user_id);
+    const profileMap = await fetchProfileMap(participantUserIds);
 
     const summaries: ConversationSummary[] = (conversationRows ?? []).map((conv) => {
       const participantsForConversation = (allParticipants ?? []).filter(
@@ -259,6 +295,8 @@ router.get<
         participants: participantsForConversation.map((p) => ({
           user_id: p.user_id,
           role: p.role,
+          display_name: profileDisplayName(profileMap.get(p.user_id)),
+          profile_picture_url: profileMap.get(p.user_id)?.profile_picture_url ?? null,
         })),
         unread_count: unreadMessagesForConversation.length,
       };
@@ -504,6 +542,8 @@ router.post<
       ? postListingMap.get(conversation.context_listing_id)
       : undefined;
     const { title: postLTitle, address: postLAddr } = listingLabel(postListing);
+    const postParticipantUserIds = (participants ?? []).map((p) => p.user_id);
+    const postProfileMap = await fetchProfileMap(postParticipantUserIds);
 
     const summary: ConversationSummary = {
       id: conversation.id,
@@ -517,6 +557,8 @@ router.post<
       participants: (participants ?? []).map((p) => ({
         user_id: p.user_id,
         role: p.role,
+        display_name: profileDisplayName(postProfileMap.get(p.user_id)),
+        profile_picture_url: postProfileMap.get(p.user_id)?.profile_picture_url ?? null,
       })),
       unread_count: unreadMessages.length,
     };
@@ -663,6 +705,8 @@ router.get<
       ? detailListingMap.get(conversation.context_listing_id)
       : undefined;
     const { title: detailLTitle, address: detailLAddr } = listingLabel(detailListing);
+    const detailParticipantUserIds = (participants ?? []).map((p) => p.user_id);
+    const detailProfileMap = await fetchProfileMap(detailParticipantUserIds);
 
     const summary: ConversationSummary = {
       id: conversation.id,
@@ -676,6 +720,8 @@ router.get<
       participants: (participants ?? []).map((p) => ({
         user_id: p.user_id,
         role: p.role,
+        display_name: profileDisplayName(detailProfileMap.get(p.user_id)),
+        profile_picture_url: detailProfileMap.get(p.user_id)?.profile_picture_url ?? null,
       })),
       unread_count: unreadMessages.length,
     };

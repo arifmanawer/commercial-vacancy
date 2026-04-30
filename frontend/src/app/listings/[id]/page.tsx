@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabasePublic } from "@/lib/supabaseClient";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/api";
@@ -96,7 +96,9 @@ export default function ListingPage() {
       setListing(null);
 
       try {
-        const { data: listingRow, error: listingError } = await supabase
+        // Use the public client so listing pages remain accessible even if auth storage
+        // is wedged due to multi-tab Stripe redirect flows.
+        const { data: listingRow, error: listingError } = await supabasePublic
           .from("listings")
           .select(
             "id, title, description, address, city, state, zip_code, property_type, user_id, rate_type, rate_amount, min_duration, max_duration",
@@ -109,7 +111,7 @@ export default function ListingPage() {
           return;
         }
 
-        const { data: imgRows, error: imgError } = await supabase
+        const { data: imgRows, error: imgError } = await supabasePublic
           .from("listings_images")
           .select("image_url")
           .eq("property_id", id)
@@ -254,7 +256,7 @@ export default function ListingPage() {
       setLandlordError(null);
       setLandlordInfo(null);
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabasePublic
           .rpc("get_listing_landlord_public", { listing_id: id })
           .maybeSingle();
 

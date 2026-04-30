@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabasePublic } from "@/lib/supabaseClient";
 import { SaveListingButton } from "@/components/SaveListingButton";
 
 function ListingImage({ src, alt }: { src?: string | null; alt: string }) {
@@ -167,7 +167,9 @@ export default function BrowsePage() {
     async function loadListings() {
       setLoadingListings(true);
       try {
-        const { data: listingRows, error: listingsError } = await supabase
+        // Use the public client so browsing is resilient to auth storage lock contention
+        // (e.g. multi-tab Stripe redirect flows).
+        const { data: listingRows, error: listingsError } = await supabasePublic
           .from("listings")
           .select(
             "id, title, address, city, state, property_type, rate_amount, rate_type",
@@ -195,7 +197,7 @@ export default function BrowsePage() {
           const merged: ImageRow[] = [];
           for (let i = 0; i < ids.length; i += PROPERTY_REL_CHUNK) {
             const chunk = ids.slice(i, i + PROPERTY_REL_CHUNK);
-            const { data, error: imgErr } = await supabase
+            const { data, error: imgErr } = await supabasePublic
               .from("listings_images")
               .select("id, property_id, image_url")
               .in("property_id", chunk)
@@ -213,7 +215,7 @@ export default function BrowsePage() {
           const merged: PricingRow[] = [];
           for (let i = 0; i < ids.length; i += PROPERTY_REL_CHUNK) {
             const chunk = ids.slice(i, i + PROPERTY_REL_CHUNK);
-            const { data, error: priceErr } = await supabase
+            const { data, error: priceErr } = await supabasePublic
               .from("property_pricing")
               .select("id, property_id, security_deposit")
               .in("property_id", chunk);

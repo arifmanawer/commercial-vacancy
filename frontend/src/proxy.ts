@@ -30,9 +30,13 @@ export async function proxy(request: NextRequest) {
             options: any;
           }>
         ) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
+          // Keep request cookies in sync so this request uses refreshed auth,
+          // then write the same cookies to the outgoing response.
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     }

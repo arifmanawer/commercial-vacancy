@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -112,6 +112,15 @@ export default function AssistantClient({ listingId }: { listingId?: string }) {
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  function handleMessageKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!sending && message.trim()) {
+        void send(e);
+      }
     }
   }
 
@@ -233,6 +242,7 @@ export default function AssistantClient({ listingId }: { listingId?: string }) {
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleMessageKeyDown}
                   placeholder={placeholder}
                   rows={1}
                   className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 focus:border-[var(--brand)]/40 max-h-28"

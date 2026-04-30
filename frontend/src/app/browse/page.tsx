@@ -26,6 +26,8 @@ function ListingImage({ src, alt }: { src?: string | null; alt: string }) {
       <img
         src={src}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
         onLoad={() => setLoaded(true)}
       />
@@ -42,6 +44,7 @@ type ListingView = {
   property_type?: string | null;
   rate_amount?: number | null;
   rate_type?: string | null;
+  security_deposit?: number | null;
   image?: string | null;
 };
 
@@ -61,9 +64,27 @@ type ListingRow = {
 };
 
 type ImageRow = {
+  id?: string | number;
   property_id: string;
   image_url: string[] | null;
 };
+
+type PricingRow = {
+  id?: string | number;
+  property_id: string;
+  security_deposit: number | string | null;
+};
+
+const PROPERTY_REL_CHUNK = 120;
+
+function sortByStableId<T extends { id?: string | number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const na = Number(a.id);
+    const nb = Number(b.id);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+}
 
 type FilterState = {
   propertyType: string;
@@ -148,7 +169,9 @@ export default function BrowsePage() {
       try {
         const { data: listingRows, error: listingsError } = await supabase
           .from("listings")
-          .select("id, title, address, city, state, property_type, rate_amount, rate_type")
+          .select(
+            "id, title, address, city, state, property_type, rate_amount, rate_type",
+          )
           .order("created_at", { ascending: false });
 
         if (listingsError) {
@@ -168,15 +191,68 @@ export default function BrowsePage() {
 
         const ids = rows.map((r) => r.id);
 
-        const { data: imgRows } = await supabase
-          .from("listings_images")
-          .select("property_id, image_url")
-          .in("property_id", ids)
-          .order("id", { ascending: true });
+        async function fetchImageRows(): Promise<ImageRow[]> {
+          const merged: ImageRow[] = [];
+          for (let i = 0; i < ids.length; i += PROPERTY_REL_CHUNK) {
+            const chunk = ids.slice(i, i + PROPERTY_REL_CHUNK);
+            const { data, error: imgErr } = await supabase
+              .from("listings_images")
+              .select("id, property_id, image_url")
+              .in("property_id", chunk)
+              .order("id", { ascending: true });
+            if (imgErr) {
+              console.error("listings_images fetch failed", imgErr);
+              continue;
+            }
+            merged.push(...((data ?? []) as ImageRow[]));
+          }
+          return merged;
+        }
 
-        const imgMap = new Map<string, any>();
-        const imgRowsTyped = (imgRows ?? []) as ImageRow[];
-        imgRowsTyped.forEach((r) => imgMap.set(r.property_id, r));
+        async function fetchPricingRows(): Promise<PricingRow[]> {
+          const merged: PricingRow[] = [];
+          for (let i = 0; i < ids.length; i += PROPERTY_REL_CHUNK) {
+            const chunk = ids.slice(i, i + PROPERTY_REL_CHUNK);
+            const { data, error: priceErr } = await supabase
+              .from("property_pricing")
+              .select("id, property_id, security_deposit")
+              .in("property_id", chunk);
+            if (priceErr) {
+              console.error("property_pricing fetch failed", priceErr);
+              continue;
+            }
+            merged.push(...((data ?? []) as PricingRow[]));
+          }
+          return merged;
+        }
+
+        const [imgRowsMerged, pricingRowsMerged] = await Promise.all([
+          fetchImageRows(),
+          fetchPricingRows(),
+        ]);
+
+        const thumbByProperty = new Map<string, string | null>();
+        for (const r of sortByStableId(imgRowsMerged)) {
+          if (thumbByProperty.has(r.property_id)) continue;
+          const first = Array.isArray(r.image_url)
+            ? r.image_url.find((u) => typeof u === "string" && u.length > 0)
+            : null;
+          thumbByProperty.set(r.property_id, first ?? null);
+        }
+
+        const depositByProperty = new Map<string, number | null>();
+        for (const r of sortByStableId(pricingRowsMerged)) {
+          if (depositByProperty.has(r.property_id)) continue;
+          const raw = r.security_deposit;
+          const n =
+            raw === null || raw === undefined || raw === ""
+              ? null
+              : Number(raw);
+          depositByProperty.set(
+            r.property_id,
+            typeof n === "number" && Number.isFinite(n) ? n : null,
+          );
+        }
 
         const view = rows.map((r) => {
           return {
@@ -188,7 +264,8 @@ export default function BrowsePage() {
             property_type: r.property_type,
             rate_amount: r.rate_amount ?? null,
             rate_type: r.rate_type ?? null,
-            image: imgMap.get(r.id)?.image_url?.[0] ?? null,
+            security_deposit: depositByProperty.get(r.id) ?? null,
+            image: thumbByProperty.get(r.id) ?? null,
           };
         });
 
@@ -240,7 +317,13 @@ export default function BrowsePage() {
   const filteredListings = listings.filter((listing) => {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      const haystack = [listing.title, listing.address, listing.city, listing.state, listing.property_type]
+      const haystack = [
+        listing.title,
+        listing.address,
+        listing.city,
+        listing.state,
+        listing.property_type,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -272,6 +355,22 @@ export default function BrowsePage() {
       }
     }
 
+    const deposit = listing.security_deposit ?? null;
+
+    if (filters.minDeposit) {
+      const min = Number(filters.minDeposit);
+      if (Number.isFinite(min)) {
+        if (deposit === null || deposit < min) return false;
+      }
+    }
+
+    if (filters.maxDeposit) {
+      const max = Number(filters.maxDeposit);
+      if (Number.isFinite(max)) {
+        if (deposit === null || deposit > max) return false;
+      }
+    }
+
     return true;
   });
 
@@ -291,8 +390,8 @@ export default function BrowsePage() {
           Browse Spaces
         </h1>
         <p className="mt-3 text-slate-600 max-w-2xl leading-relaxed">
-          Search and filter available commercial spaces across NYC.
-          Find offices, retail, studios, and more by location, type, and budget.
+          Search and filter available commercial spaces across NYC. Find
+          offices, retail, studios, and more by location, type, and budget.
         </p>
 
         <div className="mt-8 relative">
@@ -310,7 +409,12 @@ export default function BrowsePage() {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
 
@@ -459,7 +563,8 @@ export default function BrowsePage() {
                       {listing.title}
                     </h3>
                     <p className="mt-1 text-xs text-slate-600">
-                      {listing.city ?? ""}{" "}
+                      {listing.city ?? ""}
+                      {""}
                       {listing.state ? `, ${listing.state}` : ""} ·{" "}
                       {listing.property_type ?? ""}
                     </p>

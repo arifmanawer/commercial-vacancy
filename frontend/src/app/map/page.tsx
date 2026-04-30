@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import Link from "next/link";
 import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import MapView, {
@@ -9,6 +10,11 @@ import MapView, {
 
 export default function MapPage() {
   const [nearby, setNearby] = useState<NearbyListingSummary[]>([]);
+  const [listingIdToFocus, setListingIdToFocus] = useState<string | null>(null);
+
+  const handleFocusListingHandled = useCallback(() => {
+    setListingIdToFocus(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -29,7 +35,11 @@ export default function MapPage() {
 
         <section className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,2.3fr)_minmax(0,1.2fr)] gap-6">
           <div className="h-[480px]">
-            <MapView onNearbyChange={setNearby} />
+            <MapView
+              onNearbyChange={setNearby}
+              focusListingId={listingIdToFocus}
+              onFocusListingHandled={handleFocusListingHandled}
+            />
           </div>
 
           <aside className="h-[480px] rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden">
@@ -55,29 +65,42 @@ export default function MapPage() {
             ) : (
               <ul className="flex-1 overflow-y-auto divide-y divide-slate-100">
                 {nearby.map((listing) => (
-                  <li key={listing.id} className="px-4 py-3 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-slate-900 line-clamp-1">
-                          {listing.title}
-                        </p>
-                        <p className="text-slate-600 line-clamp-1">
-                          {listing.address}
-                          {listing.city ? `, ${listing.city}` : ""}
-                        </p>
-                        <p className="mt-1 uppercase tracking-wide text-[10px] font-bold text-slate-500">
-                          {listing.property_type}
-                        </p>
+                  <li key={listing.id} className="px-4 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setListingIdToFocus(listing.id)}
+                      className="w-full text-left rounded-lg px-0 py-2 text-xs transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/30 focus-visible:ring-offset-1"
+                      aria-label={`Show ${listing.title} on map`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 line-clamp-1">
+                            {listing.title}
+                          </p>
+                          <p className="text-slate-600 line-clamp-1">
+                            {listing.address}
+                            {listing.city ? `, ${listing.city}` : ""}
+                          </p>
+                          <p className="mt-1 uppercase tracking-wide text-[10px] font-bold text-slate-500">
+                            {listing.property_type}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-[11px] font-semibold text-slate-900">
+                            {listing.distanceMiles.toFixed(1)} mi
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            away from you
+                          </p>
+                        </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-[11px] font-semibold text-slate-900">
-                          {listing.distanceMiles.toFixed(1)} mi
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          away from you
-                        </p>
-                      </div>
-                    </div>
+                    </button>
+                    <Link
+                      href={`/listings/${listing.id}`}
+                      className="mt-1 inline-block pb-2 pl-0 text-[11px] font-medium text-[var(--brand)] hover:underline"
+                    >
+                      View listing
+                    </Link>
                   </li>
                 ))}
               </ul>

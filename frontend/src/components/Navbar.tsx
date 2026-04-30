@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -45,7 +45,12 @@ function NavLink({ href, label }: { href: string; label: string }) {
 export default function Navbar() {
   const { isLandlord, loading } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { totalUnread } = useConversations();
+  const pathname = usePathname();
+  const enableUnread = useMemo(() => {
+    if (!pathname) return false;
+    return pathname === "/messages" || pathname.startsWith("/messages/") || pathname.startsWith("/dashboard");
+  }, [pathname]);
+  const { totalUnread } = useConversations({ enabled: enableUnread, focusDebounceMs: 400 });
 
   return (
     <nav className="relative h-[var(--nav-height)] max-w-[var(--container)] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -124,7 +129,7 @@ export default function Navbar() {
             className="hidden sm:inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors mr-1"
           >
             <span>Messages</span>
-            {totalUnread > 0 && (
+            {enableUnread && totalUnread > 0 && (
               <span className="inline-flex items-center justify-center rounded-full bg-[var(--brand)] text-white text-[10px] font-semibold min-w-[1.1rem] h-4 px-1">
                 {totalUnread > 9 ? "9+" : totalUnread}
               </span>

@@ -36,6 +36,10 @@ export const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false,
+    // Ensure this client never contends for the same Web Lock/storage keys as the
+    // authenticated browser client. This avoids "multiple GoTrueClient" lock churn
+    // during multi-tab Stripe/3DS redirects.
+    storageKey: 'sb-public',
   },
 });
 

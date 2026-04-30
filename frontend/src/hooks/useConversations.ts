@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -22,14 +22,19 @@ export interface ConversationSummary {
   unread_count: number;
 }
 
-export function useConversations() {
+export function useConversations(options?: { enabled?: boolean; focusDebounceMs?: number }) {
   const { user } = useAuth();
+  const enabled = options?.enabled ?? true;
+  const focusDebounceMs = options?.focusDebounceMs ?? 250;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
 
+  const abortRef = useRef<AbortController | null>(null);
+  const focusTimerRef = useRef<number | null>(null);
+
   async function loadConversations(cancelled = false) {
-    if (!user) {
+    if (!enabled || !user) {
       setConversations([]);
       setLoading(false);
       return;
@@ -38,10 +43,16 @@ export function useConversations() {
     setLoading(true);
     setError(null);
     try {
+      // Cancel any in-flight request (e.g. user switches tabs rapidly).
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
         headers: {
           "X-User-Id": user.id,
         },
+        signal: controller.signal,
       });
 
       const json = (await res.json().catch(() => null)) as
@@ -60,6 +71,7 @@ export function useConversations() {
       }
     } catch (_err) {
       if (!cancelled) {
+        // Ignore abort errors triggered by tab switching / unmounts.
         setError("Failed to load conversations");
       }
     } finally {
@@ -117,19 +129,26 @@ export function useConversations() {
     loadConversations(cancelled);
 
     const refreshOnFocus = () => {
-      loadConversations(false);
+      // Avoid triggering work for background tabs/windows.
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = window.setTimeout(() => {
+        loadConversations(false);
+      }, focusDebounceMs);
     };
     window.addEventListener("focus", refreshOnFocus);
 
     return () => {
       cancelled = true;
+      abortRef.current?.abort();
+      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [user]);
+  }, [user?.id, enabled, focusDebounceMs]);
 
-  const totalUnread = conversations.reduce(
-    (sum, conv) => sum + (conv.unread_count || 0),
-    0
+  const totalUnread = useMemo(
+    () => conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0),
+    [conversations]
   );
 
   return { conversations, loading, error, totalUnread, refresh, markAllAsRead };

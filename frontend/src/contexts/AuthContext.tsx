@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import type { Profile } from "@/types/database";
@@ -77,6 +77,16 @@ async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isSessionFresh(s: Session | null, opts?: { bufferMs?: number }) {
+  if (!s?.expires_at) return false;
+  const bufferMs = opts?.bufferMs ?? 60_000;
+  return s.expires_at * 1000 > Date.now() + bufferMs;
+}
+
+type AuthLeaderMsg =
+  | { type: "claim"; tabId: string; ts: number }
+  | { type: "leader"; tabId: string; ts: number };
+
 /**
  * Supabase auth uses browser storage + Web Locks to coordinate cross-tab updates.
  * During Stripe/3DS flows, multiple tabs can land back on the app and briefly contend
@@ -116,6 +126,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLeader, setIsLeader] = useState(false);
+  const isLeaderRef = useRef(false);
+  const sessionRef = useRef<Session | null>(null);
+  const authOpRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  useEffect(() => {
+    isLeaderRef.current = isLeader;
+  }, [isLeader]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  const runAuthOp = useCallback(async <T,>(fn: () => Promise<T>) => {
+    // Serialize *all* Supabase auth operations within this tab to avoid
+    // self-inflicted LockManager contention.
+    const prev = authOpRef.current;
+    let resolveNext: (v: unknown) => void;
+    authOpRef.current = new Promise((r) => {
+      resolveNext = r;
+    });
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      resolveNext!(null);
+    }
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     if (!user?.id) {
@@ -137,24 +175,146 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // On hard refresh in production, token refresh can lag briefly.
     // Retry once after forcing a refresh to avoid falling back to default profile UI.
     try {
-      await withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 5, baseDelayMs: 150 });
+      // Only the elected leader tab should attempt refreshSession to avoid lock contention.
+      if (isLeaderRef.current) {
+        await runAuthOp(() =>
+          withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 5, baseDelayMs: 150 })
+        );
+      } else {
+        // Followers: avoid refreshSession; just wait briefly and retry profile fetch.
+        await sleep(250);
+      }
     } catch (err) {
       throw err;
     }
     p = await fetchProfile(userId);
     return p;
-  }, []);
+  }, [runAuthOp]);
 
   useEffect(() => {
     let cancelled = false;
+    const tabId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
 
-    const boot = withAuthLockRetry(
-      async () => Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]),
-      { attempts: 8, baseDelayMs: 120 }
-    );
+    let bc: BroadcastChannel | null = null;
+    let claimTs = Date.now();
+    let bestClaim: { ts: number; tabId: string } = { ts: claimTs, tabId };
+    let lastLeaderBeatAt = 0;
+    let leaderBeatInterval: number | null = null;
+    let reelectTimer: number | null = null;
+    let bootTimer: number | null = null;
+    let visibleRefreshTimer: number | null = null;
 
-    boot
-      .then(async ([sessionRes, userRes]) => {
+    const becomeLeader = () => {
+      if (cancelled) return;
+      setIsLeader(true);
+      // Heartbeat so followers can detect leader disappearance.
+      if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);
+      leaderBeatInterval = window.setInterval(() => {
+        try {
+          bc?.postMessage({ type: "leader", tabId, ts: Date.now() } satisfies AuthLeaderMsg);
+        } catch {
+          // ignore
+        }
+      }, 1000);
+    };
+
+    const becomeFollower = () => {
+      if (cancelled) return;
+      setIsLeader(false);
+      if (leaderBeatInterval) {
+        window.clearInterval(leaderBeatInterval);
+        leaderBeatInterval = null;
+      }
+    };
+
+    const decideLeader = () => {
+      if (cancelled) return;
+      if (bestClaim.tabId === tabId) becomeLeader();
+      else becomeFollower();
+    };
+
+    const startElection = () => {
+      claimTs = Date.now();
+      bestClaim = { ts: claimTs, tabId };
+      try {
+        bc?.postMessage({ type: "claim", tabId, ts: claimTs } satisfies AuthLeaderMsg);
+      } catch {
+        // ignore
+      }
+      // Give a short window for other tabs to send claims; earliest wins.
+      window.setTimeout(decideLeader, 200);
+    };
+
+    const scheduleReelection = () => {
+      if (reelectTimer) window.clearTimeout(reelectTimer);
+      reelectTimer = window.setTimeout(() => {
+        startElection();
+      }, 1500);
+    };
+
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      bc = new BroadcastChannel("auth-leader");
+      bc.onmessage = (evt: MessageEvent) => {
+        const msg = evt.data as AuthLeaderMsg | undefined;
+        if (!msg || typeof msg !== "object") return;
+
+        if (msg.type === "claim") {
+          const other = { ts: msg.ts, tabId: msg.tabId };
+          const isBetter =
+            other.ts < bestClaim.ts || (other.ts === bestClaim.ts && other.tabId < bestClaim.tabId);
+          if (isBetter) bestClaim = other;
+          return;
+        }
+
+        if (msg.type === "leader") {
+          lastLeaderBeatAt = Date.now();
+          // If we thought we were leader but another tab is beating, step down unless we are the same tab.
+          if (msg.tabId !== tabId && isLeader) {
+            becomeFollower();
+          }
+        }
+      };
+    }
+
+    startElection();
+
+    const monitorLeader = window.setInterval(() => {
+      if (cancelled) return;
+      if (isLeader) return;
+      // If no leader beat seen recently, re-elect.
+      if (lastLeaderBeatAt && Date.now() - lastLeaderBeatAt > 2500) {
+        scheduleReelection();
+      }
+    }, 800);
+
+    const bootAuth = async (mode: "full" | "minimal") => {
+      // 3) Guard boot: if hidden, delay full boot to let visible leader go first.
+      if (typeof document !== "undefined" && document.visibilityState !== "visible" && mode === "full") {
+        await sleep(1500);
+      }
+
+      try {
+        if (mode === "minimal") {
+          const sessionRes = await runAuthOp(() =>
+            withAuthLockRetry(() => supabase.auth.getSession(), {
+              attempts: 3,
+              baseDelayMs: 200,
+            })
+          );
+          if (cancelled) return;
+          setSession(sessionRes.data.session);
+          setUser(sessionRes.data.session?.user ?? null);
+          // Don't force profile loads from followers; keep prior.
+          return;
+        }
+
+        const [sessionRes, userRes] = await runAuthOp(() =>
+          withAuthLockRetry(async () => Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]), {
+            attempts: 8,
+            baseDelayMs: 120,
+          })
+        );
         if (cancelled) return;
 
         const s = sessionRes.data.session;
@@ -172,15 +332,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setProfile(null);
         }
-      })
-      .catch((err) => {
-        // If we still fail after retries, don't destructively clear auth.
-        // Keep existing state (if any) and allow the app to render.
+      } catch (err) {
+        // 5) On lock timeout, retry getSession once after 2s.
+        if (isSupabaseAuthLockTimeout(err)) {
+          await sleep(2000);
+          try {
+            const sessionRes = await runAuthOp(() => supabase.auth.getSession());
+            if (cancelled) return;
+            setSession(sessionRes.data.session);
+            setUser(sessionRes.data.session?.user ?? null);
+          } catch {
+            // ignore
+          }
+          return;
+        }
         if (!cancelled) setProfile((prev) => prev);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+
+    // 1) visibilitychange + focus debounce guard:
+    // When the tab becomes visible, followers do a minimal getSession (if missing/stale),
+    // leaders may refresh after 2s if session is stale.
+    const onVisibleMaybeRefresh = () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+
+      if (visibleRefreshTimer) window.clearTimeout(visibleRefreshTimer);
+      visibleRefreshTimer = window.setTimeout(async () => {
+        if (cancelled) return;
+
+        // Followers: only fetch session if missing/stale; never refreshSession here.
+        if (!isLeaderRef.current) {
+          if (!isSessionFresh(sessionRef.current, { bufferMs: 60_000 })) {
+            await bootAuth("minimal");
+          }
+          return;
+        }
+
+        // Leaders: only refresh if session is stale.
+        if (isSessionFresh(sessionRef.current, { bufferMs: 60_000 })) return;
+        try {
+          await runAuthOp(() =>
+            withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 3, baseDelayMs: 300 })
+          );
+          // After refresh, re-read session/user.
+          await bootAuth("minimal");
+        } catch {
+          // ignore; next visibility/focus will retry
+        }
+      }, 2000);
+    };
+
+    document.addEventListener("visibilitychange", onVisibleMaybeRefresh);
+    window.addEventListener("focus", onVisibleMaybeRefresh);
+
+    // 3) Guard boot sequence based on visibility; leader runs full boot, followers minimal.
+    bootTimer = window.setTimeout(() => {
+      bootAuth(isLeaderRef.current ? "full" : "minimal");
+    }, typeof document !== "undefined" && document.visibilityState !== "visible" ? 1500 : 0);
 
     // Fallback: never leave loading true for more than 3s (e.g. if getSession hangs)
     const timeoutId = setTimeout(() => {
@@ -212,10 +423,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      window.clearInterval(monitorLeader);
+      if (bootTimer) window.clearTimeout(bootTimer);
+      if (visibleRefreshTimer) window.clearTimeout(visibleRefreshTimer);
+      if (reelectTimer) window.clearTimeout(reelectTimer);
+      if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);
+      bc?.close();
+      document.removeEventListener("visibilitychange", onVisibleMaybeRefresh);
+      window.removeEventListener("focus", onVisibleMaybeRefresh);
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [resolveProfile]);
+  }, [resolveProfile, runAuthOp]);
 
   const signOut = async () => {
     try {

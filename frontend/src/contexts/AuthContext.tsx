@@ -73,6 +73,34 @@ function clearSupabaseAuthCookiesAndStorage() {
   }
 }
 
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Supabase auth uses browser storage + Web Locks to coordinate cross-tab updates.
+ * During Stripe/3DS flows, multiple tabs can land back on the app and briefly contend
+ * for the auth lock. That should not force a logout; instead we retry reads for a bit.
+ */
+async function withAuthLockRetry<T>(fn: () => Promise<T>, opts?: { attempts?: number; baseDelayMs?: number }) {
+  const attempts = Math.max(1, opts?.attempts ?? 8);
+  const baseDelayMs = Math.max(50, opts?.baseDelayMs ?? 120);
+
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isSupabaseAuthLockTimeout(err)) throw err;
+      // Exponential backoff with a small cap to keep UX snappy.
+      const delay = Math.min(1500, baseDelayMs * Math.pow(1.6, i));
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
@@ -88,7 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authStorageWedge, setAuthStorageWedge] = useState(false);
 
   const refreshProfile = useCallback(async () => {
     if (!user?.id) {
@@ -110,13 +137,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // On hard refresh in production, token refresh can lag briefly.
     // Retry once after forcing a refresh to avoid falling back to default profile UI.
     try {
-      await supabase.auth.refreshSession();
+      await withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 5, baseDelayMs: 150 });
     } catch (err) {
-      if (isSupabaseAuthLockTimeout(err)) {
-        // Auth storage is wedged; treat as logged out.
-        setAuthStorageWedge(true);
-        return null;
-      }
       throw err;
     }
     p = await fetchProfile(userId);
@@ -126,10 +148,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    // If auth storage is wedged, skip auth reads and allow app to run in anon mode.
-    const boot = authStorageWedge
-      ? Promise.resolve([{ data: { session: null } } as any, { data: { user: null } } as any])
-      : Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]);
+    const boot = withAuthLockRetry(
+      async () => Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]),
+      { attempts: 8, baseDelayMs: 120 }
+    );
 
     boot
       .then(async ([sessionRes, userRes]) => {
@@ -152,24 +174,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err) => {
-        if (isSupabaseAuthLockTimeout(err)) {
-          setAuthStorageWedge(true);
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-          try {
-            const key = "__cv_auth_reset_once__";
-            const already = typeof window !== "undefined" && sessionStorage.getItem(key);
-            if (!already) {
-              sessionStorage.setItem(key, "1");
-              clearSupabaseAuthCookiesAndStorage();
-            }
-          } catch {
-            // ignore
-          }
-          return;
-        }
-        if (!cancelled) setProfile(null);
+        // If we still fail after retries, don't destructively clear auth.
+        // Keep existing state (if any) and allow the app to render.
+        if (!cancelled) setProfile((prev) => prev);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -193,30 +200,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
         }
       } catch (err) {
-        if (isSupabaseAuthLockTimeout(err)) {
-          // Another tab likely holds the auth lock. Clear local auth and proceed in anon mode.
-          setAuthStorageWedge(true);
+        // Never clear auth on lock contention; it is usually transient during multi-tab redirects.
+        // For other errors, fall back to safe logged-out state.
+        if (!isSupabaseAuthLockTimeout(err)) {
           setSession(null);
           setUser(null);
           setProfile(null);
-
-          // Clear cookies/storage once per tab to break the deadlock loop.
-          try {
-            const key = "__cv_auth_reset_once__";
-            const already = typeof window !== "undefined" && sessionStorage.getItem(key);
-            if (!already) {
-              sessionStorage.setItem(key, "1");
-              clearSupabaseAuthCookiesAndStorage();
-            }
-          } catch {
-            // ignore
-          }
-          return;
         }
-        // For other errors, fall back to safe logged-out state.
-        setSession(null);
-        setUser(null);
-        setProfile(null);
       }
     });
 
@@ -225,15 +215,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [authStorageWedge, resolveProfile]);
+  }, [resolveProfile]);
 
   const signOut = async () => {
     try {
       await supabase.auth.signOut({ scope: "global" });
     } catch (err) {
       if (isSupabaseAuthLockTimeout(err)) {
-        setAuthStorageWedge(true);
-        clearSupabaseAuthCookiesAndStorage();
+        // If another tab holds the lock, let this be a no-op and rely on cross-tab signout.
+        return;
       } else {
         throw err;
       }

@@ -251,6 +251,112 @@ router.post<
       return;
     }
 
+    // If a previous buy-now attempt created a pending offer/booking but never made it to
+    // `reserved`, we remove it so the renter can try again. This must run *before* the
+    // listing overlap check, otherwise the stale booking blocks retries.
+    let conversationId: string | null = null;
+    const { data: existingConversations } = await supabaseAdmin
+      .from('conversations')
+      .select('id, context_type, context_listing_id')
+      .eq('context_type', 'listing')
+      .eq('context_listing_id', listing.id)
+      .limit(20);
+
+    if (existingConversations && existingConversations.length > 0) {
+      const candidateIds = existingConversations.map((c) => c.id);
+      const { data: participants } = await supabaseAdmin
+        .from('conversation_participants')
+        .select('conversation_id, user_id')
+        .in('conversation_id', candidateIds);
+      const targetPair = [userId, listing.user_id].sort();
+
+      for (const conv of existingConversations) {
+        const ids = (participants ?? [])
+          .filter((p) => p.conversation_id === conv.id)
+          .map((p) => p.user_id)
+          .sort();
+        if (ids.length === 2 && ids[0] === targetPair[0] && ids[1] === targetPair[1]) {
+          conversationId = conv.id;
+          break;
+        }
+      }
+    }
+
+    if (conversationId) {
+      // This conversation can only have one pending offer (partial unique index).
+      // We prefer deleting stale pending offers, but if for any reason a pending offer has an
+      // already-reserved booking (shouldn't happen), we at least cancel it to clear the unique
+      // constraint and keep the history.
+      const { data: pendingOffers, error: pendingOffersError } = await supabaseAdmin
+        .from('offers')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .eq('status', 'pending');
+
+      if (pendingOffersError) {
+        logBookingsApi('POST', '/api/bookings/buy-now', userId, false, pendingOffersError.message);
+        res.status(500).json({ success: false, error: 'Failed to validate prior offers' });
+        return;
+      }
+
+      if (pendingOffers && pendingOffers.length > 0) {
+        const pendingOfferIds = pendingOffers.map((o) => o.id);
+
+        const { data: relatedBookings, error: relatedBookingsError } = await supabaseAdmin
+          .from('bookings')
+          .select('id, offer_id, status')
+          .in('offer_id', pendingOfferIds);
+
+        if (relatedBookingsError) {
+          logBookingsApi(
+            'POST',
+            '/api/bookings/buy-now',
+            userId,
+            false,
+            relatedBookingsError.message
+          );
+          res.status(500).json({ success: false, error: 'Failed to validate prior bookings' });
+          return;
+        }
+
+        const keepOfferIds = new Set(
+          (relatedBookings ?? [])
+            .filter((b) => b.status === 'reserved' || b.status === 'active' || b.status === 'completed')
+            .map((b) => b.offer_id)
+        );
+
+        const deletableOfferIds = pendingOfferIds.filter((id) => !keepOfferIds.has(id));
+        const nonDeletableOfferIds = pendingOfferIds.filter((id) => keepOfferIds.has(id));
+
+        if (deletableOfferIds.length > 0) {
+          const { error: deleteError } = await supabaseAdmin
+            .from('offers')
+            .delete()
+            .in('id', deletableOfferIds);
+
+          if (deleteError) {
+            logBookingsApi('POST', '/api/bookings/buy-now', userId, false, deleteError.message);
+            res.status(500).json({ success: false, error: 'Failed to delete prior pending offer' });
+            return;
+          }
+        }
+
+        if (nonDeletableOfferIds.length > 0) {
+          const { error: cancelError } = await supabaseAdmin
+            .from('offers')
+            .update({ status: 'cancelled' } as any)
+            .in('id', nonDeletableOfferIds)
+            .eq('status', 'pending');
+
+          if (cancelError) {
+            logBookingsApi('POST', '/api/bookings/buy-now', userId, false, cancelError.message);
+            res.status(500).json({ success: false, error: 'Failed to cancel prior pending offer' });
+            return;
+          }
+        }
+      }
+    }
+
     const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
     const { data: existingBookings, error: existingError } = await supabaseAdmin
       .from('bookings')
@@ -318,34 +424,6 @@ router.post<
     const landlordAmount = total - platformFee;
     const currency = (listing.currency || 'usd').toLowerCase();
 
-    let conversationId: string | null = null;
-    const { data: existingConversations } = await supabaseAdmin
-      .from('conversations')
-      .select('id, context_type, context_listing_id')
-      .eq('context_type', 'listing')
-      .eq('context_listing_id', listing.id)
-      .limit(20);
-
-    if (existingConversations && existingConversations.length > 0) {
-      const candidateIds = existingConversations.map((c) => c.id);
-      const { data: participants } = await supabaseAdmin
-        .from('conversation_participants')
-        .select('conversation_id, user_id')
-        .in('conversation_id', candidateIds);
-      const targetPair = [userId, listing.user_id].sort();
-
-      for (const conv of existingConversations) {
-        const ids = (participants ?? [])
-          .filter((p) => p.conversation_id === conv.id)
-          .map((p) => p.user_id)
-          .sort();
-        if (ids.length === 2 && ids[0] === targetPair[0] && ids[1] === targetPair[1]) {
-          conversationId = conv.id;
-          break;
-        }
-      }
-    }
-
     if (!conversationId) {
       const { data: createdConversation, error: conversationError } = await supabaseAdmin
         .from('conversations')
@@ -390,76 +468,6 @@ router.post<
       }
 
       conversationId = createdConversation.id;
-    }
-
-    // This conversation can only have one pending offer (partial unique index).
-    // If a previous buy-now attempt created a pending offer/booking but never made it to
-    // `reserved`, we remove it so the renter can try again.
-    //
-    // We prefer deleting stale pending offers, but if for any reason a pending offer has an
-    // already-reserved booking (shouldn't happen), we at least cancel it to clear the unique
-    // constraint and keep the history.
-    const { data: pendingOffers, error: pendingOffersError } = await supabaseAdmin
-      .from('offers')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('status', 'pending');
-
-    if (pendingOffersError) {
-      logBookingsApi('POST', '/api/bookings/buy-now', userId, false, pendingOffersError.message);
-      res.status(500).json({ success: false, error: 'Failed to validate prior offers' });
-      return;
-    }
-
-    if (pendingOffers && pendingOffers.length > 0) {
-      const pendingOfferIds = pendingOffers.map((o) => o.id);
-
-      const { data: relatedBookings, error: relatedBookingsError } = await supabaseAdmin
-        .from('bookings')
-        .select('id, offer_id, status')
-        .in('offer_id', pendingOfferIds);
-
-      if (relatedBookingsError) {
-        logBookingsApi('POST', '/api/bookings/buy-now', userId, false, relatedBookingsError.message);
-        res.status(500).json({ success: false, error: 'Failed to validate prior bookings' });
-        return;
-      }
-
-      const keepOfferIds = new Set(
-        (relatedBookings ?? [])
-          .filter((b) => b.status === 'reserved' || b.status === 'active' || b.status === 'completed')
-          .map((b) => b.offer_id)
-      );
-
-      const deletableOfferIds = pendingOfferIds.filter((id) => !keepOfferIds.has(id));
-      const nonDeletableOfferIds = pendingOfferIds.filter((id) => keepOfferIds.has(id));
-
-      if (deletableOfferIds.length > 0) {
-        const { error: deleteError } = await supabaseAdmin
-          .from('offers')
-          .delete()
-          .in('id', deletableOfferIds);
-
-        if (deleteError) {
-          logBookingsApi('POST', '/api/bookings/buy-now', userId, false, deleteError.message);
-          res.status(500).json({ success: false, error: 'Failed to delete prior pending offer' });
-          return;
-        }
-      }
-
-      if (nonDeletableOfferIds.length > 0) {
-        const { error: cancelError } = await supabaseAdmin
-          .from('offers')
-          .update({ status: 'cancelled' } as any)
-          .in('id', nonDeletableOfferIds)
-          .eq('status', 'pending');
-
-        if (cancelError) {
-          logBookingsApi('POST', '/api/bookings/buy-now', userId, false, cancelError.message);
-          res.status(500).json({ success: false, error: 'Failed to cancel prior pending offer' });
-          return;
-        }
-      }
     }
 
     const { data: insertedOffer, error: offerError } = await supabaseAdmin

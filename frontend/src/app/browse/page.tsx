@@ -563,7 +563,8 @@ export default function BrowsePage() {
                       {listing.title}
                     </h3>
                     <p className="mt-1 text-xs text-slate-600">
-                      {listing.city ?? ""}{" "}
+                      {listing.city ?? ""}
+                      {""}
                       {listing.state ? `, ${listing.state}` : ""} ·{" "}
                       {listing.property_type ?? ""}
                     </p>

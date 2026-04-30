@@ -7,6 +7,13 @@ import {
 } from "@/lib/listingPricing";
 
 const PROPERTY_TYPES = ["Apartment", "House", "Commercial", "Office", "Studio"];
+const US_STATE_ABBREVIATIONS = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+];
 
 export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) => Promise<void> | void }) {
   const [form, setForm] = useState({
@@ -160,14 +167,20 @@ export default function CreateListingForm({ onSubmit }: { onSubmit: (data: any) 
         </div>
         <div>
           <label className="block text-slate-700 font-semibold mb-1">State</label>
-          <input
+          <select
             name="state"
             value={form.state}
             onChange={handleChange}
             required
             className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-[var(--brand)] focus:border-[var(--brand)] transition shadow-sm bg-slate-50"
-            placeholder="State"
-          />
+          >
+            <option value="">Select state</option>
+            {US_STATE_ABBREVIATIONS.map((abbr) => (
+              <option key={abbr} value={abbr}>
+                {abbr}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

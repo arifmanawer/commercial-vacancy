@@ -388,10 +388,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisibleMaybeRefresh);
     window.addEventListener("focus", onVisibleMaybeRefresh);
 
-    // 3) Guard boot sequence based on visibility; leader runs full boot, followers minimal.
+    // 3) Guard boot sequence based on visibility; elect leader first, then boot.
+    // Waiting one election window avoids first-render races where tabs default to follower
+    // and skip profile hydration on hard refresh.
     bootTimer = window.setTimeout(() => {
       bootAuth(isLeaderRef.current ? "full" : "minimal");
-    }, typeof document !== "undefined" && document.visibilityState !== "visible" ? 1500 : 0);
+    }, (typeof document !== "undefined" && document.visibilityState !== "visible" ? 1500 : 0) + 260);
 
     // Fallback: never leave loading true for more than 3s (e.g. if getSession hangs)
     const timeoutId = setTimeout(() => {
@@ -421,10 +423,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Ensure profile hydration after election settles even when no auth event fires.
+    // Followers keep minimal behavior to avoid multi-tab lock churn.
+    const postElectionHydration = window.setTimeout(() => {
+      if (cancelled || !isLeaderRef.current) return;
+      void bootAuth("full");
+    }, 1200);
+
     return () => {
       cancelled = true;
       window.clearInterval(monitorLeader);
       if (bootTimer) window.clearTimeout(bootTimer);
+      window.clearTimeout(postElectionHydration);
       if (visibleRefreshTimer) window.clearTimeout(visibleRefreshTimer);
       if (reelectTimer) window.clearTimeout(reelectTimer);
       if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);

@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Supabase browser client for use in Client Components.
@@ -15,6 +16,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 /** Singleton Supabase client - stores auth in cookies for SSR/middleware */
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+/**
+ * Public, non-auth Supabase client.
+ *
+ * Why this exists:
+ * - Supabase auth persistence uses the browser Web Locks API to serialize token
+ *   reads/writes across tabs.
+ * - During Stripe redirects/3DS flows, users can end up with multiple tabs
+ *   landing back on the app simultaneously, causing lock contention and timeouts
+ *   like: "Acquiring an exclusive Navigator LockManager lock ... timed out".
+ * - Public browsing should continue to work even if auth storage is wedged.
+ *
+ * This client never reads/writes session state and therefore avoids auth locks.
+ * Use it for public reads (e.g. listings browse/detail).
+ */
+export const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
 
 export async function getCurrentSession() {

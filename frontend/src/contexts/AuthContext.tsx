@@ -22,9 +22,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 async function fetchProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select(
-      "id, email, is_landlord, is_contractor, created_at, username, first_name, last_name, address, description, profile_picture_url",
-    )
+    .select("*")
     .eq("id", userId)
     .single();
   if (error || !data) return null;
@@ -50,18 +48,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
+  const resolveProfile = useCallback(async (userId: string) => {
+    let p = await fetchProfile(userId);
+    if (p) return p;
+
+    // On hard refresh in production, token refresh can lag briefly.
+    // Retry once after forcing a refresh to avoid falling back to default profile UI.
+    await supabase.auth.refreshSession();
+    p = await fetchProfile(userId);
+    return p;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session: s } }) => {
+    Promise.all([supabase.auth.getSession(), supabase.auth.getUser()])
+      .then(async ([sessionRes, userRes]) => {
         if (cancelled) return;
+
+        const s = sessionRes.data.session;
+        const verifiedUser = userRes.data.user ?? null;
         setSession(s);
-        setUser(s?.user ?? null);
-        if (s?.user?.id) {
+        setUser(verifiedUser);
+
+        if (verifiedUser?.id) {
           try {
-            const p = await fetchProfile(s.user.id);
+            const p = await resolveProfile(verifiedUser.id);
             if (!cancelled) setProfile(p);
           } catch {
             if (!cancelled) setProfile(null);
@@ -88,8 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user?.id) {
-        const p = await fetchProfile(s.user.id);
-        setProfile(p);
+        const p = await resolveProfile(s.user.id);
+        setProfile((prev) => p ?? prev);
       } else {
         setProfile(null);
       }
@@ -100,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [resolveProfile]);
 
   const signOut = async () => {
     try {

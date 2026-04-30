@@ -91,11 +91,22 @@ function distanceInMiles(
 
 type MapViewProps = {
   onNearbyChange?: (nearby: NearbyListingSummary[]) => void;
+  /** When set, pans the map to this listing and opens its info window. Cleared via `onFocusListingHandled`. */
+  focusListingId?: string | null;
+  onFocusListingHandled?: () => void;
 };
 
-export default function MapView({ onNearbyChange }: MapViewProps) {
+const DEFAULT_ZOOM = 12;
+const FOCUSED_LISTING_ZOOM = 15;
+
+export default function MapView({
+  onNearbyChange,
+  focusListingId,
+  onFocusListingHandled,
+}: MapViewProps) {
   const { toast } = useToast();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM);
   const [center, setCenter] = useState<google.maps.LatLngLiteral>(DEFAULT_CENTER);
   const [searchLocation, setSearchLocation] =
     useState<google.maps.LatLngLiteral | null>(null);
@@ -225,6 +236,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
     setCenter(location);
     setSearchLocation(location);
     setActiveId(null);
+    setMapZoom(DEFAULT_ZOOM);
   };
 
   const nearbyListings = useMemo(() => {
@@ -270,6 +282,17 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
     );
   }, [nearbyListings, onNearbyChange]);
 
+  useEffect(() => {
+    if (!focusListingId) return;
+    const listing = listings.find((l) => l.id === focusListingId);
+    if (!listing) return;
+
+    setCenter(listing.position);
+    setMapZoom(FOCUSED_LISTING_ZOOM);
+    setActiveId(listing.id);
+    onFocusListingHandled?.();
+  }, [focusListingId, listings, onFocusListingHandled]);
+
   if (!isLoaded) {
     return (
       <div className="h-[480px] w-full rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm text-slate-500">
@@ -292,7 +315,7 @@ export default function MapView({ onNearbyChange }: MapViewProps) {
       )}
       <GoogleMap
         center={center}
-        zoom={12}
+        zoom={mapZoom}
         mapContainerStyle={containerStyle}
         options={{
           styles: MAP_STYLES,

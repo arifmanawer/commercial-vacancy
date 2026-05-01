@@ -877,31 +877,6 @@ router.post<
       return;
     }
 
-    const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin
-      .from('bookings')
-      .select('id, status')
-      .eq('offer_id', o.id);
-
-    if (existingBookingsError) {
-      logOffersApi(
-        'POST',
-        '/api/offers/:id/accept',
-        userId,
-        false,
-        existingBookingsError.message
-      );
-      res.status(500).json({ success: false, error: 'Failed to validate existing bookings' });
-      return;
-    }
-
-    if (existingBookings && existingBookings.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'This offer already has an associated booking',
-      });
-      return;
-    }
-
     const isOwnerAccepting = userId === o.landlord_id;
 
     if (isOwnerAccepting) {
@@ -1056,6 +1031,49 @@ router.post<
       res.status(500).json({
         success: false,
         error: 'Offer has invalid amounts (platform fee exceeds total)',
+      });
+      return;
+    }
+
+    const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
+
+    const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin
+      .from('bookings')
+      .select('id, offer_id, start_datetime, end_datetime, status')
+      .eq('listing_id', o.listing_id)
+      .in('status', activeStatuses);
+
+    if (existingBookingsError) {
+      logOffersApi(
+        'POST',
+        '/api/offers/:id/accept',
+        userId,
+        false,
+        existingBookingsError.message
+      );
+      res.status(500).json({ success: false, error: 'Failed to validate existing bookings' });
+      return;
+    }
+
+    const existingForSameOffer = (existingBookings ?? []).some((b) => b.offer_id === o.id);
+    if (existingForSameOffer) {
+      res.status(409).json({
+        success: false,
+        error: 'This offer already has an active booking',
+      });
+      return;
+    }
+
+    const hasOverlap = (existingBookings ?? []).some((booking) => {
+      const existingStart = new Date(booking.start_datetime);
+      const existingEnd = new Date(booking.end_datetime);
+      return start < existingEnd && end > existingStart;
+    });
+
+    if (hasOverlap) {
+      res.status(409).json({
+        success: false,
+        error: 'Listing is not available for the selected offer time window',
       });
       return;
     }

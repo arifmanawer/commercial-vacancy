@@ -1111,6 +1111,20 @@ router.post<
     try {
       const stripe = requireStripe();
       const currency = (o.currency || 'usd').toLowerCase();
+      const checkoutMetadata = {
+        booking_id: booking.id,
+        offer_id: booking.offer_id,
+        listing_id: booking.listing_id,
+        renter_id: booking.renter_id,
+        landlord_id: booking.landlord_id,
+        flow: 'offer_accept',
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+        rate_type: o.rate_type,
+        duration_units: String(o.duration),
+        total_amount_cents: String(o.total_amount),
+        currency,
+      };
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         success_url: `${config.frontendUrl}/messages/${o.conversation_id}?checkout=success`,
@@ -1133,22 +1147,9 @@ router.post<
           transfer_data: {
             destination: landlordProfile.stripe_account_id as string,
           },
-          metadata: {
-            booking_id: booking.id,
-            offer_id: booking.offer_id,
-            listing_id: booking.listing_id,
-            renter_id: booking.renter_id,
-            landlord_id: booking.landlord_id,
-            start_datetime: booking.start_datetime,
-            end_datetime: booking.end_datetime,
-            flow: 'offer_accept',
-          },
+          metadata: checkoutMetadata,
         },
-        metadata: {
-          booking_id: booking.id,
-          start_datetime: booking.start_datetime,
-          end_datetime: booking.end_datetime,
-        },
+        metadata: checkoutMetadata,
       });
 
       let sessionToUse = session;

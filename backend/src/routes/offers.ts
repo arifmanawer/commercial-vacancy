@@ -321,12 +321,21 @@ router.post<
       }
     }
 
+    const hasRateTypeOverride = rateTypeOverride != null && String(rateTypeOverride).trim().length > 0;
+    const hasRateAmountOverride =
+      rateAmountOverride != null && String(rateAmountOverride).trim().length > 0;
+    if (hasRateTypeOverride !== hasRateAmountOverride) {
+      res.status(400).json({
+        success: false,
+        error: 'Enter both rate type and rate amount',
+      });
+      return;
+    }
+
     let rateType = listing.rate_type;
     let rateAmount = listing.rate_amount;
-    if (rateTypeOverride != null && String(rateTypeOverride).trim()) {
+    if (hasRateTypeOverride && hasRateAmountOverride) {
       rateType = String(rateTypeOverride).trim();
-    }
-    if (rateAmountOverride != null) {
       const n = Number(rateAmountOverride);
       if (!Number.isFinite(n) || n <= 0) {
         res.status(400).json({ success: false, error: 'rateAmount must be a positive number when provided' });
@@ -579,12 +588,21 @@ router.post<
       return;
     }
 
+    const hasRateTypeOverride = rateTypeOverride != null && String(rateTypeOverride).trim().length > 0;
+    const hasRateAmountOverride =
+      rateAmountOverride != null && String(rateAmountOverride).trim().length > 0;
+    if (hasRateTypeOverride !== hasRateAmountOverride) {
+      res.status(400).json({
+        success: false,
+        error: 'Enter both rate type and rate amount',
+      });
+      return;
+    }
+
     let rateType = p.rate_type;
     let rateAmount = p.rate_amount;
-    if (rateTypeOverride != null && String(rateTypeOverride).trim()) {
+    if (hasRateTypeOverride && hasRateAmountOverride) {
       rateType = String(rateTypeOverride).trim();
-    }
-    if (rateAmountOverride != null) {
       const n = Number(rateAmountOverride);
       if (!Number.isFinite(n) || n <= 0) {
         res.status(400).json({ success: false, error: 'rateAmount must be a positive number when provided' });

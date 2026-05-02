@@ -626,7 +626,7 @@ export default function ConversationPage() {
                           if (offerFormError) setOfferFormError(null);
                         }}
                         placeholder={
-                          durationUnitLabel === "units"
+                          durationUnitLabel === "listing rate units"
                             ? "e.g. 3"
                             : `e.g. 3 ${durationUnitLabel}`
                         }

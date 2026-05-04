@@ -321,12 +321,21 @@ router.post<
       }
     }
 
+    const hasRateTypeOverride = rateTypeOverride != null && String(rateTypeOverride).trim().length > 0;
+    const hasRateAmountOverride =
+      rateAmountOverride != null && String(rateAmountOverride).trim().length > 0;
+    if (hasRateTypeOverride !== hasRateAmountOverride) {
+      res.status(400).json({
+        success: false,
+        error: 'Enter both rate type and rate amount',
+      });
+      return;
+    }
+
     let rateType = listing.rate_type;
     let rateAmount = listing.rate_amount;
-    if (rateTypeOverride != null && String(rateTypeOverride).trim()) {
+    if (hasRateTypeOverride && hasRateAmountOverride) {
       rateType = String(rateTypeOverride).trim();
-    }
-    if (rateAmountOverride != null) {
       const n = Number(rateAmountOverride);
       if (!Number.isFinite(n) || n <= 0) {
         res.status(400).json({ success: false, error: 'rateAmount must be a positive number when provided' });
@@ -579,12 +588,21 @@ router.post<
       return;
     }
 
+    const hasRateTypeOverride = rateTypeOverride != null && String(rateTypeOverride).trim().length > 0;
+    const hasRateAmountOverride =
+      rateAmountOverride != null && String(rateAmountOverride).trim().length > 0;
+    if (hasRateTypeOverride !== hasRateAmountOverride) {
+      res.status(400).json({
+        success: false,
+        error: 'Enter both rate type and rate amount',
+      });
+      return;
+    }
+
     let rateType = p.rate_type;
     let rateAmount = p.rate_amount;
-    if (rateTypeOverride != null && String(rateTypeOverride).trim()) {
+    if (hasRateTypeOverride && hasRateAmountOverride) {
       rateType = String(rateTypeOverride).trim();
-    }
-    if (rateAmountOverride != null) {
       const n = Number(rateAmountOverride);
       if (!Number.isFinite(n) || n <= 0) {
         res.status(400).json({ success: false, error: 'rateAmount must be a positive number when provided' });
@@ -877,31 +895,6 @@ router.post<
       return;
     }
 
-    const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin
-      .from('bookings')
-      .select('id, status')
-      .eq('offer_id', o.id);
-
-    if (existingBookingsError) {
-      logOffersApi(
-        'POST',
-        '/api/offers/:id/accept',
-        userId,
-        false,
-        existingBookingsError.message
-      );
-      res.status(500).json({ success: false, error: 'Failed to validate existing bookings' });
-      return;
-    }
-
-    if (existingBookings && existingBookings.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'This offer already has an associated booking',
-      });
-      return;
-    }
-
     const isOwnerAccepting = userId === o.landlord_id;
 
     if (isOwnerAccepting) {
@@ -1060,6 +1053,49 @@ router.post<
       return;
     }
 
+    const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
+
+    const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin
+      .from('bookings')
+      .select('id, offer_id, start_datetime, end_datetime, status')
+      .eq('listing_id', o.listing_id)
+      .in('status', activeStatuses);
+
+    if (existingBookingsError) {
+      logOffersApi(
+        'POST',
+        '/api/offers/:id/accept',
+        userId,
+        false,
+        existingBookingsError.message
+      );
+      res.status(500).json({ success: false, error: 'Failed to validate existing bookings' });
+      return;
+    }
+
+    const existingForSameOffer = (existingBookings ?? []).some((b) => b.offer_id === o.id);
+    if (existingForSameOffer) {
+      res.status(409).json({
+        success: false,
+        error: 'This offer already has an active booking',
+      });
+      return;
+    }
+
+    const hasOverlap = (existingBookings ?? []).some((booking) => {
+      const existingStart = new Date(booking.start_datetime);
+      const existingEnd = new Date(booking.end_datetime);
+      return start < existingEnd && end > existingStart;
+    });
+
+    if (hasOverlap) {
+      res.status(409).json({
+        success: false,
+        error: 'Listing is not available for the selected offer time window',
+      });
+      return;
+    }
+
     const {
       data: booking,
       error: bookingError,
@@ -1093,6 +1129,20 @@ router.post<
     try {
       const stripe = requireStripe();
       const currency = (o.currency || 'usd').toLowerCase();
+      const checkoutMetadata = {
+        booking_id: booking.id,
+        offer_id: booking.offer_id,
+        listing_id: booking.listing_id,
+        renter_id: booking.renter_id,
+        landlord_id: booking.landlord_id,
+        flow: 'offer_accept',
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+        rate_type: o.rate_type,
+        duration_units: String(o.duration),
+        total_amount_cents: String(o.total_amount),
+        currency,
+      };
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         success_url: `${config.frontendUrl}/messages/${o.conversation_id}?checkout=success`,
@@ -1115,22 +1165,9 @@ router.post<
           transfer_data: {
             destination: landlordProfile.stripe_account_id as string,
           },
-          metadata: {
-            booking_id: booking.id,
-            offer_id: booking.offer_id,
-            listing_id: booking.listing_id,
-            renter_id: booking.renter_id,
-            landlord_id: booking.landlord_id,
-            start_datetime: booking.start_datetime,
-            end_datetime: booking.end_datetime,
-            flow: 'offer_accept',
-          },
+          metadata: checkoutMetadata,
         },
-        metadata: {
-          booking_id: booking.id,
-          start_datetime: booking.start_datetime,
-          end_datetime: booking.end_datetime,
-        },
+        metadata: checkoutMetadata,
       });
 
       let sessionToUse = session;

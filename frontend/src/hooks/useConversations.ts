@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, withApiUserId } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { debugFetch } from "@/lib/debugFetch";
 
 export type ConversationContextType = "listing" | "contractor" | "general";
 
@@ -48,12 +49,16 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
+      const res = await debugFetch(
+        withApiUserId(`${getApiUrl()}/api/messages/conversations`, user.id),
+        {
         headers: {
           "X-User-Id": user.id,
         },
         signal: controller.signal,
-      });
+        },
+        { label: "messages.conversations.list", userId: user.id },
+      );
 
       const json = (await res.json().catch(() => null)) as
         | { success?: boolean; data?: ConversationSummary[]; error?: string }
@@ -105,12 +110,19 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
 
     const results = await Promise.allSettled(
       unreadConversationIds.map((conversationId) =>
-        fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}/read`, {
-          method: "POST",
-          headers: {
-            "X-User-Id": user.id,
+        debugFetch(
+          withApiUserId(
+            `${getApiUrl()}/api/messages/conversations/${conversationId}/read`,
+            user.id,
+          ),
+          {
+            method: "POST",
+            headers: {
+              "X-User-Id": user.id,
+            },
           },
-        })
+          { label: "messages.conversations.read", userId: user.id },
+        ),
       )
     );
 

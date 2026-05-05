@@ -173,8 +173,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      authDebug.info("startup.getSession.start");
+      const shouldResetOnBoot =
+        process.env.NEXT_PUBLIC_RESET_AUTH_ON_BOOT === "1";
+      authDebug.info("startup.boot", { shouldResetOnBoot });
       try {
+        if (shouldResetOnBoot) {
+          authDebug.info("startup.resetSession.start");
+          // Clean slate on app boot (debug mode).
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {
+            // ignore
+          }
+          clearSupabaseAuthCookiesAndStorage();
+          if (cancelled) return;
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          authDebug.info("startup.resetSession.done");
+        }
+
+        authDebug.info("startup.getSession.start");
         const {
           data: { session: s },
           error,
@@ -201,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } finally {
         if (!cancelled) setLoading(false);
-        authDebug.info("startup.getSession.done", { cancelled });
+      authDebug.info("startup.getSession.done", { cancelled });
       }
     })();
 

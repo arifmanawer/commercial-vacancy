@@ -34,6 +34,15 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
   const abortRef = useRef<AbortController | null>(null);
   const focusTimerRef = useRef<number | null>(null);
 
+  function isAbortError(err: unknown) {
+    return (
+      (err instanceof DOMException && err.name === "AbortError") ||
+      (err instanceof Error &&
+        (err.name === "AbortError" ||
+          err.message.toLowerCase().includes("aborted")))
+    );
+  }
+
   async function loadConversations(cancelled = false) {
     if (!enabled || !user) {
       setConversations([]);
@@ -74,9 +83,10 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
       if (!cancelled) {
         setConversations(json.data || []);
       }
-    } catch (_err) {
+    } catch (err) {
+      // Abort is expected when switching tabs/unmounting/refreshing.
+      if (isAbortError(err)) return;
       if (!cancelled) {
-        // Ignore abort errors triggered by tab switching / unmounts.
         setError("Failed to load conversations");
       }
     } finally {

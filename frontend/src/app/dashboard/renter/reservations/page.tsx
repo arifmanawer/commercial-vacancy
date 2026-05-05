@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { withTimeout } from "@/lib/withTimeout";
 
 type BookingStatus =
   | "pending_payment"
@@ -111,66 +112,87 @@ export default function RenterReservationsPage() {
       setError(null);
       setBookings([]);
 
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
+      try {
+        if (!userId) {
+          return;
+        }
 
-      const { data: bookingRows, error: bookingError } = await supabase
-        .from("bookings")
-        .select(
-          "id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, currency, total_amount, created_at",
-        )
-        .eq("renter_id", userId)
-        .order("start_datetime", { ascending: true });
-
-      if (cancelled) return;
-
-      if (bookingError) {
-        setError(
-          bookingError.message || "Could not load your reservations right now.",
+        const { data: bookingRows, error: bookingError } = await withTimeout(
+          supabase
+            .from("bookings")
+            .select(
+              "id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, currency, total_amount, created_at",
+            )
+            .eq("renter_id", userId)
+            .order("start_datetime", { ascending: true }),
+          12_000,
+          "Reservations: bookings",
         );
-        setLoading(false);
-        return;
-      }
 
-      const rows = (bookingRows ?? []) as BookingRow[];
-      const listingIds = Array.from(
-        new Set(rows.map((b) => b.listing_id).filter(Boolean)),
-      );
+        if (cancelled) return;
 
-      if (listingIds.length === 0) {
-        setBookings([]);
-        setLoading(false);
-        return;
-      }
+        if (bookingError) {
+          setError(
+            bookingError.message || "Could not load your reservations right now.",
+          );
+          return;
+        }
 
-      const { data: listingRows } = await supabase
-        .from("listings")
-        .select("id, title, city, state, property_type")
-        .in("id", listingIds);
+        const rows = (bookingRows ?? []) as BookingRow[];
+        const listingIds = Array.from(
+          new Set(rows.map((b) => b.listing_id).filter(Boolean)),
+        );
 
-      const { data: imgRows } = await supabase
-        .from("listings_images")
-        .select("property_id, image_url")
-        .in("property_id", listingIds);
+        if (listingIds.length === 0) {
+          setBookings([]);
+          return;
+        }
 
-      if (cancelled) return;
+        const { data: listingRows } = await withTimeout(
+          supabase
+            .from("listings")
+            .select("id, title, city, state, property_type")
+            .in("id", listingIds),
+          12_000,
+          "Reservations: listings",
+        );
 
-      const listingMap = new Map<string, ListingRow>();
-      (listingRows ?? []).forEach((l: any) => listingMap.set(l.id, l));
+        const { data: imgRows } = await withTimeout(
+          supabase
+            .from("listings_images")
+            .select("property_id, image_url")
+            .in("property_id", listingIds),
+          12_000,
+          "Reservations: listings_images",
+        );
 
-      const imageMap = new Map<string, ImageRow>();
-      (imgRows ?? []).forEach((r: any) => imageMap.set(r.property_id, r));
+        if (cancelled) return;
 
-      setBookings(
-        rows.map((b) => {
+        const listingMap = new Map<string, ListingRow>();
+        (listingRows ?? []).forEach((l: any) => listingMap.set(l.id, l));
+
+        const imageMap = new Map<string, ImageRow>();
+        (imgRows ?? []).forEach((r: any) => imageMap.set(r.property_id, r));
+
+        const mapped = rows.map((b) => {
           const listing = listingMap.get(b.listing_id) ?? null;
           const image = imageMap.get(b.listing_id)?.image_url?.[0] ?? null;
           return { ...b, listing, image };
-        }),
-      );
-      setLoading(false);
+        });
+
+        setBookings(mapped);
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setBookings([]);
+        setError(
+          msg.includes("timed out")
+            ? "Loading reservations took too long. Check your connection and try again."
+            : msg || "Could not load your reservations right now.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     load();

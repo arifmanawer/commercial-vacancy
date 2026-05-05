@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { withTimeout } from "@/lib/withTimeout";
 import { useConversations } from "@/hooks/useConversations";
 
 type BookingStatus =
@@ -36,22 +37,6 @@ type SavedListing = {
   rate_type?: string | null;
   image?: string | null;
 };
-
-function withTimeout<T>(p: PromiseLike<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
-    Promise.resolve(p).then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (err) => {
-        clearTimeout(t);
-        reject(err);
-      },
-    );
-  });
-}
 
 export default function RenterDashboardPage() {
   const { user } = useAuth();
@@ -149,7 +134,9 @@ export default function RenterDashboardPage() {
             };
           }) ?? [];
 
-        if (!cancelled) setSavedListings(view);
+        if (!cancelled) {
+          setSavedListings(view);
+        }
       } catch (err) {
         if (!cancelled) {
           const msg = err instanceof Error ? err.message : "Unable to load saved spaces.";

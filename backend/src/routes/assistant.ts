@@ -32,18 +32,15 @@ const assistantPerUserRateLimit = createRateLimiter({
   windowMs: 60_000,
   max: config.assistant.perUserRpmLimit,
   key: (req) => {
-    const userId = (req.headers['x-user-id'] as string) || '';
+    const userId = req.user?.id || '';
     if (userId) return `user:${userId}`;
     const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
     return `ip:${ip}`;
   },
 });
 
-function getUserId(req: Request): string | null {
-  const headerId = req.headers['x-user-id'];
-  const queryId = req.query.user_id;
-  const id = (headerId as string) || (queryId as string) || '';
-  return id || null;
+function getUserId(req: Request): string {
+  return req.user!.id;
 }
 
 type Persona = 'renter' | 'landlord' | 'contractor';
@@ -173,10 +170,6 @@ router.post<{}, ApiResponse<AssistantResponse> | ApiResponse, ChatRequestBody>(
     const userId = getUserId(req);
     const message = (req.body?.message || '').trim();
 
-    if (!userId) {
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header)' });
-      return;
-    }
     if (!message) {
       res.status(400).json({ success: false, error: 'message is required' });
       return;

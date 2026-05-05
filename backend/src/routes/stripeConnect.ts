@@ -32,15 +32,7 @@ function logStripeConnect(
 router.post<{}, ConnectOnboardingResponse>(
   '/connect/onboarding',
   asyncHandler(async (req: Request, res: Response<ConnectOnboardingResponse>) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logStripeConnect('POST', '/api/stripe/connect/onboarding', undefined, false, 'Missing user_id');
-      res
-        .status(400)
-        .json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const refreshUrl = process.env.STRIPE_CONNECT_REFRESH_URL;
     const returnUrl = process.env.STRIPE_CONNECT_RETURN_URL;

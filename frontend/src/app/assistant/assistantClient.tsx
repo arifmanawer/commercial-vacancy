@@ -5,7 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 
 type ListingCard = {
   id: string;
@@ -73,11 +73,11 @@ export default function AssistantClient({ listingId }: { listingId?: string }) {
     setMessage("");
 
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${getApiUrl()}/api/assistant/chat`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify({
           message: trimmed,

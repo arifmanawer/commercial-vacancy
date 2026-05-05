@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Review } from "@/types/database";
 import Link from "next/link";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,11 +167,11 @@ export default function ProfileReviews({
     setSubmitError(null);
 
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${getApiUrl()}/api/profiles/${targetUserId}/reviews`, {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify({
           rating,
@@ -209,11 +209,11 @@ export default function ProfileReviews({
     setSubmitError(null);
 
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${getApiUrl()}/api/profiles/${targetUserId}/reviews`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify({ rating, role_context: roleContext, content: content.trim() }),
       });

@@ -77,13 +77,7 @@ router.post<
 >(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logContractorJobs('POST', '/api/contractor-jobs', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const {
       contractor_id,
@@ -161,13 +155,7 @@ router.get<
 >(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logContractorJobs('GET', '/api/contractor-jobs', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const { role = 'landlord', page = '1', limit = '20', listing_id } = req.query;
     const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
@@ -235,14 +223,8 @@ router.patch<
 >(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
+    const userId = req.user!.id;
     const { id } = req.params;
-
-    if (!userId) {
-      logContractorJobs('PATCH', `/api/contractor-jobs/${id}`, undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
 
     const {
       status,

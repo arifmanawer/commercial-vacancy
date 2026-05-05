@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { withTimeout } from "@/lib/withTimeout";
 import { useConversations } from "@/hooks/useConversations";
 import { clientDebug } from "@/lib/clientDebug";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { debugFetch } from "@/lib/debugFetch";
 
 type BookingStatus =
@@ -76,10 +76,11 @@ export default function RenterDashboardPage() {
       try {
         clientDebug.info("renter.dashboard.load.start", { userId });
         const startedAt = Date.now();
+        const authHeaders = await getAuthHeaders();
         const res = await withTimeout(
           debugFetch(
-            withApiUserId(`${getApiUrl()}/api/renters/dashboard`, userId),
-            { headers: { "X-User-Id": userId } },
+            `${getApiUrl()}/api/renters/dashboard`,
+            { headers: { ...authHeaders } },
             { label: "renters.dashboard", userId },
           ),
           15_000,

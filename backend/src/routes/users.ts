@@ -20,13 +20,7 @@ function logApiRequest(method: string, path: string, userId?: string, success?: 
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logApiRequest('GET', '/api/users', undefined, false, 'Missing user_id');
-      res.status(400).json({ error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const {
       data: { user },

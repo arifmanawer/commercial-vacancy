@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ConversationSummary } from "./useConversations";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { debugFetch } from "@/lib/debugFetch";
 
 export interface Message {
@@ -60,15 +60,11 @@ export function useConversation(conversationId: string | null) {
 
   async function refreshConversation() {
     if (!user || !conversationId) return;
+    const authHeaders = await getAuthHeaders();
     const res = await debugFetch(
-      withApiUserId(
-        `${getApiUrl()}/api/messages/conversations/${conversationId}`,
-        user.id,
-      ),
+      `${getApiUrl()}/api/messages/conversations/${conversationId}`,
       {
-      headers: {
-        "X-User-Id": user.id,
-      },
+        headers: { ...authHeaders },
       },
       { label: "messages.conversations.get", userId: user.id },
     );
@@ -98,14 +94,12 @@ export function useConversation(conversationId: string | null) {
       setLoading(true);
       setError(null);
       try {
+        const authHeaders = await getAuthHeaders();
         const res = await debugFetch(
-          withApiUserId(
-            `${getApiUrl()}/api/messages/conversations/${conversationId}`,
-            user.id,
-          ),
+          `${getApiUrl()}/api/messages/conversations/${conversationId}`,
           {
             headers: {
-              "X-User-Id": user!.id,
+              ...authHeaders,
             },
           },
           { label: "messages.conversations.get", userId: user.id },
@@ -134,15 +128,13 @@ export function useConversation(conversationId: string | null) {
         }
 
         if (json.data.conversation.unread_count > 0) {
+          const readHeaders = await getAuthHeaders();
           await debugFetch(
-            withApiUserId(
-              `${getApiUrl()}/api/messages/conversations/${conversationId}/read`,
-              user.id,
-            ),
+            `${getApiUrl()}/api/messages/conversations/${conversationId}/read`,
             {
               method: "POST",
               headers: {
-                "X-User-Id": user.id,
+                ...readHeaders,
               },
             },
             { label: "messages.conversations.read", userId: user.id },

@@ -3,6 +3,7 @@ import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse, PaginatedResponse } from '../types';
+import { requireAuth } from '../middleware/requireAuth';
 
 const router = Router();
 
@@ -144,14 +145,9 @@ router.get<
   ApiResponse<ContractorApiModel | undefined> | ApiResponse
 >(
   '/me',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logContractorApi('GET', '/api/contractors/me', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     if (!(await requireContractorRole(userId, res))) {
       logContractorApi('GET', '/api/contractors/me', userId, false, 'Not contractor');
@@ -255,14 +251,9 @@ router.post<
   }
 >(
   '/me',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logContractorApi('POST', '/api/contractors/me', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     if (!(await requireContractorRole(userId, res))) {
       logContractorApi('POST', '/api/contractors/me', userId, false, 'Not contractor');
@@ -370,14 +361,9 @@ router.get<
   PaginatedResponse<ContractorApiModel> | ApiResponse
 >(
   '/',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logContractorApi('GET', '/api/contractors', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     // Ensure caller is a landlord
     const {

@@ -6,7 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { debugFetch } from "@/lib/debugFetch";
 import { useToast } from "@/components/Toast";
 import type {
@@ -86,11 +86,12 @@ export default function ContractorDashboardPage() {
     const fetchProfile = async () => {
       setError(null);
       try {
+        const authHeaders = await getAuthHeaders();
         const res = await debugFetch(
-          withApiUserId(`${getApiUrl()}/api/contractors/me`, user.id),
+          `${getApiUrl()}/api/contractors/me`,
           {
           headers: {
-            "X-User-Id": user.id,
+            ...authHeaders,
           },
           },
           { label: "contractors.me.get", userId: user.id },
@@ -143,14 +144,12 @@ export default function ContractorDashboardPage() {
       setJobsError(null);
       setLoadingJobs(true);
       try {
+        const authHeaders = await getAuthHeaders();
         const res = await debugFetch(
-          withApiUserId(
-            `${getApiUrl()}/api/contractor-jobs?role=contractor`,
-            user.id,
-          ),
+          `${getApiUrl()}/api/contractor-jobs?role=contractor`,
           {
             headers: {
-              "X-User-Id": user.id,
+              ...authHeaders,
             },
           },
           { label: "contractorJobs.list", userId: user.id },
@@ -209,14 +208,16 @@ export default function ContractorDashboardPage() {
         available_days: availableDays,
       };
 
-      const res = await debugFetch(withApiUserId(`${getApiUrl()}/api/contractors/me`, user.id), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+      const authHeaders = await getAuthHeaders();
+      const res = await debugFetch(
+        `${getApiUrl()}/api/contractors/me`,
+        {
+          method: "POST",
+          headers: { ...authHeaders },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      }, { label: "contractors.me.upsert", userId: user.id });
+        { label: "contractors.me.upsert", userId: user.id },
+      );
 
       const json = (await res.json().catch(() => null)) as
         | ApiContractorResponse
@@ -245,13 +246,13 @@ export default function ContractorDashboardPage() {
     setUpdatingJobId(jobId);
     setJobsError(null);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await debugFetch(
-        withApiUserId(`${getApiUrl()}/api/contractor-jobs/${jobId}`, user.id),
+        `${getApiUrl()}/api/contractor-jobs/${jobId}`,
         {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify(updates),
         },

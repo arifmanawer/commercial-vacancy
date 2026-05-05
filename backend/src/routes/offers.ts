@@ -106,11 +106,8 @@ function logOffersApi(
   console.log(msg, { timestamp: new Date().toISOString() });
 }
 
-function getUserId(req: Request): string | null {
-  const headerId = req.headers['x-user-id'];
-  const queryId = req.query.user_id;
-  const id = (headerId as string) || (queryId as string) || '';
-  return id || null;
+function getUserId(req: Request): string {
+  return req.user!.id;
 }
 
 async function loadListing(listingId: string): Promise<{ listing: ListingRow | null; error: string | null }> {
@@ -214,15 +211,6 @@ router.post<
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = getUserId(req);
-
-    if (!userId) {
-      logOffersApi('POST', '/api/offers', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const {
       conversationId,
@@ -460,15 +448,6 @@ router.get<
     const userId = getUserId(req);
     const { conversationId } = req.params;
 
-    if (!userId) {
-      logOffersApi('GET', '/api/offers/conversation/:id', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
-
     const { data: participantRow, error: participantError } = await supabaseAdmin
       .from('conversation_participants')
       .select('conversation_id, user_id')
@@ -527,15 +506,6 @@ router.post<
     const { id: parentId } = req.params;
     const { startDate, duration, platformFeePercent, rateAmount: rateAmountOverride, rateType: rateTypeOverride, notes } =
       req.body;
-
-    if (!userId) {
-      logOffersApi('POST', '/api/offers/:id/counter', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     if (!startDate || !duration) {
       res.status(400).json({ success: false, error: 'startDate and duration are required' });
@@ -693,15 +663,6 @@ router.post<{ id: string }, ApiResponse<OfferRow> | ApiResponse>(
     const userId = getUserId(req);
     const { id } = req.params;
 
-    if (!userId) {
-      logOffersApi('POST', '/api/offers/:id/reject', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
-
     const { data: offer, error } = await supabaseAdmin
       .from('offers')
       .select(OFFER_SELECT)
@@ -765,15 +726,6 @@ router.post<{ id: string }, ApiResponse<OfferRow> | ApiResponse>(
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-
-    if (!userId) {
-      logOffersApi('POST', '/api/offers/:id/withdraw', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const { data: offer, error } = await supabaseAdmin
       .from('offers')
@@ -843,15 +795,6 @@ router.post<
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-
-    if (!userId) {
-      logOffersApi('POST', '/api/offers/:id/accept', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const {
       data: offer,

@@ -3,6 +3,7 @@ import { ParamsDictionary } from 'express-serve-static-core';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../types';
+import { requireAuth } from '../middleware/requireAuth';
 
 const router = Router();
 
@@ -48,14 +49,9 @@ router.get<
   }> | ApiResponse
 >(
   '/me',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logProfileApi('GET', '/api/profiles/me', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const { data, error } = await supabaseAdmin
       .from('profiles')
@@ -104,14 +100,9 @@ router.patch<
   }> | ApiResponse
 >(
   '/me',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logProfileApi('PATCH', '/api/profiles/me', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const {
       username,
@@ -178,14 +169,9 @@ router.post<
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean }> | ApiResponse
 >(
   '/upgrade-landlord',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logProfileApi('POST', '/api/profiles/upgrade-landlord', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const {
       data: { user },
@@ -234,14 +220,9 @@ router.post<
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean; is_contractor: boolean }> | ApiResponse
 >(
   '/upgrade-contractor',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!userId) {
-      logProfileApi('POST', '/api/profiles/upgrade-contractor', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
+    const userId = req.user!.id;
 
     const {
       data: { user },
@@ -290,15 +271,10 @@ router.patch<
   ApiResponse<{ id: string; email: string | null; is_landlord: boolean; is_contractor: boolean }> | ApiResponse
 >(
   '/roles',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
+    const userId = req.user!.id;
     const { is_landlord, is_contractor } = req.body as { is_landlord?: boolean; is_contractor?: boolean };
-
-    if (!userId) {
-      logProfileApi('PATCH', '/api/profiles/roles', undefined, false, 'Missing user_id');
-      res.status(400).json({ success: false, error: 'Missing user_id (X-User-Id header or user_id query param)' });
-      return;
-    }
 
     const {
       data: { user },
@@ -386,14 +362,10 @@ router.post<
   ApiResponse<ReviewRow> | ApiResponse
 >(
   '/:targetUserId/reviews',
+  requireAuth,
   asyncHandler(async (req: Request<{ targetUserId: string }>, res: Response) => {
     const { targetUserId } = req.params;
-    const reviewerId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!reviewerId) {
-      res.status(401).json({ success: false, error: 'Missing X-User-Id header' });
-      return;
-    }
+    const reviewerId = req.user!.id;
 
     if (reviewerId === targetUserId) {
       res.status(400).json({ success: false, error: 'You cannot review your own profile' });
@@ -484,14 +456,10 @@ router.patch<
   ApiResponse<ReviewRow> | ApiResponse
 >(
   '/:targetUserId/reviews',
+  requireAuth,
   asyncHandler(async (req: Request<{ targetUserId: string }>, res: Response) => {
     const { targetUserId } = req.params;
-    const reviewerId = (req.headers['x-user-id'] as string) || (req.query.user_id as string);
-
-    if (!reviewerId) {
-      res.status(401).json({ success: false, error: 'Missing X-User-Id header' });
-      return;
-    }
+    const reviewerId = req.user!.id;
 
     if (reviewerId === targetUserId) {
       res.status(400).json({ success: false, error: 'Invalid review target' });

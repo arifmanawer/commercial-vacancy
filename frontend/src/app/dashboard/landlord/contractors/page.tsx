@@ -7,7 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { contractorRatingCaption } from "@/lib/contractorReputation";
 import { supabase } from "@/lib/supabaseClient";
 import { useToast } from "@/components/Toast";
@@ -118,14 +118,10 @@ export default function LandlordContractorsPage() {
         if (radius.trim()) params.set("radius", radius.trim());
         if (zip.trim()) params.set("zip", zip.trim());
 
-        const res = await fetch(
-          `${getApiUrl()}/api/contractors?${params.toString()}`,
-          {
-            headers: {
-              "X-User-Id": user.id,
-            },
-          }
-        );
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`${getApiUrl()}/api/contractors?${params.toString()}`, {
+          headers: { ...authHeaders },
+        });
 
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as
@@ -219,11 +215,11 @@ export default function LandlordContractorsPage() {
   const handleMessageClick = async (contractor: Contractor) => {
     if (!user) return;
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify({
           contextType: "contractor",
@@ -279,11 +275,11 @@ export default function LandlordContractorsPage() {
         preferred_date: jobPreferredDate || undefined,
       };
 
+      const authHeaders = await getAuthHeaders();
       const res = await fetch(`${getApiUrl()}/api/contractor-jobs`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+          ...authHeaders,
         },
         body: JSON.stringify(payload),
       });

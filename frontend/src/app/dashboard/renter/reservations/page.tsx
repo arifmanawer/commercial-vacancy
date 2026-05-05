@@ -8,7 +8,7 @@ import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { withTimeout } from "@/lib/withTimeout";
 import { clientDebug } from "@/lib/clientDebug";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { debugFetch } from "@/lib/debugFetch";
 
 type BookingStatus =
@@ -121,10 +121,11 @@ export default function RenterReservationsPage() {
         clientDebug.info("renter.reservations.load.start", { userId });
         const startedAt = Date.now();
 
+        const authHeaders = await getAuthHeaders();
         const res = await withTimeout(
           debugFetch(
-            withApiUserId(`${getApiUrl()}/api/renters/reservations`, userId),
-            { headers: { "X-User-Id": userId } },
+            `${getApiUrl()}/api/renters/reservations`,
+            { headers: { ...authHeaders } },
             { label: "renters.reservations", userId },
           ),
           20_000,

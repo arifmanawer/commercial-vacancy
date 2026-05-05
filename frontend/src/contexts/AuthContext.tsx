@@ -120,6 +120,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return promise;
   }, []);
 
+  const loadProfileWithRetry = useCallback(
+    async (userId: string, opts?: { retries?: number; delayMs?: number }) => {
+      const retries = opts?.retries ?? 2;
+      const delayMs = opts?.delayMs ?? 500;
+      let lastErr: unknown = null;
+
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const p = await resolveProfile(userId);
+          return p;
+        } catch (err) {
+          lastErr = err;
+          // A common reason for a first-load miss is an expired access token that
+          // gets refreshed shortly after startup. Try a refresh once per attempt.
+          try {
+            await supabase.auth.refreshSession();
+          } catch {
+            // ignore refresh errors; we'll still retry resolveProfile
+          }
+          if (attempt < retries) {
+            await new Promise((r) => window.setTimeout(r, delayMs * (attempt + 1)));
+          }
+        }
+      }
+
+      throw lastErr;
+    },
+    [resolveProfile],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -131,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(s?.user ?? null);
         if (s?.user?.id) {
           try {
-            const p = await resolveProfile(s.user.id);
+            const p = await loadProfileWithRetry(s.user.id);
             if (!cancelled) setProfile(p);
           } catch {
             if (!cancelled) setProfile(null);
@@ -144,23 +174,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })();
 
-    const timeoutId = setTimeout(() => {
-      setLoading((prev) => (prev ? false : prev));
-    }, 3000);
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, s) => {
       try {
         setSession(s);
         setUser(s?.user ?? null);
-        setLoading(false);
         if (s?.user?.id) {
-          const p = await resolveProfile(s.user.id);
+          const p = await loadProfileWithRetry(s.user.id);
           setProfile((prev) => p ?? prev);
         } else {
           setProfile(null);
         }
+        setLoading(false);
       } catch (err) {
         console.warn("[auth] onAuthStateChange handler error (keeping session)", err);
         setLoading(false);
@@ -169,10 +195,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [resolveProfile]);
+  }, [loadProfileWithRetry, resolveProfile]);
 
   const signOut = async () => {
     const SIGN_OUT_WAIT_MS = 10_000;

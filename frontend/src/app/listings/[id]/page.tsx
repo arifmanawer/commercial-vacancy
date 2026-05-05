@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { format } from "date-fns";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -14,6 +15,8 @@ import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 import VacancyInsights from "@/components/VacancyInsights";
 import ZoningInsights from "@/components/ZoningInsights";
 import TransitInsights from "@/components/TransitInsights";
+import BookingDateRangePicker from "@/components/BookingDateRangePicker";
+import type { DateRange } from "react-day-picker";
 
 type LandlordPublicInfo = {
   id: string;
@@ -55,6 +58,47 @@ function apiUserQuery(userId: string) {
   return `user_id=${encodeURIComponent(userId)}`;
 }
 
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(d: Date, days: number) {
+  const copy = new Date(d.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function enumerateDaysTouched(start: Date, end: Date) {
+  const days: Date[] = [];
+  const from = startOfDay(start);
+  const to = startOfDay(end);
+  const min = Math.min(from.getTime(), to.getTime());
+  const max = Math.max(from.getTime(), to.getTime());
+  let cursor = new Date(min);
+  while (cursor.getTime() <= max) {
+    days.push(new Date(cursor.getTime()));
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
+function parseHHMM(value: string) {
+  const m = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return { hh, mm };
+}
+
+function combineLocalDateAndTime(d: Date, timeHHMM: string) {
+  const parsed = parseHHMM(timeHHMM);
+  const hh = parsed?.hh ?? 0;
+  const mm = parsed?.mm ?? 0;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
+}
+
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -72,6 +116,10 @@ export default function ListingPage() {
   const [tourTime, setTourTime] = useState("");
   const [buyStart, setBuyStart] = useState("");
   const [buyEnd, setBuyEnd] = useState("");
+  const [buyRange, setBuyRange] = useState<DateRange | undefined>(undefined);
+  const [buyStartTime, setBuyStartTime] = useState("09:00");
+  const [buyEndTime, setBuyEndTime] = useState("17:00");
+  const [reservedDates, setReservedDates] = useState<Date[]>([]);
   const [submitting, setSubmitting] = useState<"tour" | "buy" | null>(null);
   const [startingConversation, setStartingConversation] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -84,8 +132,82 @@ export default function ListingPage() {
   const [mapCenter, setMapCenter] =
     useState<google.maps.LatLngLiteral | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
+  const buyNowCardRef = React.useRef<HTMLDivElement | null>(null);
+
+  const buyNowAvailability = React.useMemo(() => {
+    if (!listing || !listing.rate_type || !buyStart || !buyEnd) return null;
+    const start = new Date(buyStart);
+    const end = new Date(buyEnd);
+    const durationUnits = computeDurationUnits(start, end, listing.rate_type);
+    if (!durationUnits) {
+      return {
+        status: "invalid" as const,
+        message: "Please choose a valid start/end time window.",
+      };
+    }
+    if (listing.min_duration != null && durationUnits < listing.min_duration) {
+      return {
+        status: "invalid" as const,
+        message: `Minimum booking is ${listing.min_duration} ${listing.rate_type}.`,
+      };
+    }
+    if (listing.max_duration != null && durationUnits > listing.max_duration) {
+      return {
+        status: "invalid" as const,
+        message: `Maximum booking is ${listing.max_duration} ${listing.rate_type}.`,
+      };
+    }
+    return {
+      status: "ok" as const,
+      message: "Listing appears available for these dates.",
+    };
+  }, [listing, buyStart, buyEnd]);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    async function loadReservedDates() {
+      const { data, error: bookingsError } = await supabasePublic
+        .from("bookings")
+        .select("start_datetime, end_datetime, status")
+        .eq("listing_id", id)
+        .in("status", ["pending_payment", "reserved", "active"]);
+
+      if (cancelled) return;
+      if (bookingsError) {
+        console.warn("reserved dates fetch error", bookingsError.message);
+        setReservedDates([]);
+        return;
+      }
+
+      const days: Date[] = [];
+      for (const row of data ?? []) {
+        const start = new Date((row as any).start_datetime);
+        const end = new Date((row as any).end_datetime);
+        const startMs = start.getTime();
+        const endMs = end.getTime();
+        if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
+        for (const d of enumerateDaysTouched(start, end)) days.push(d);
+      }
+      setReservedDates(days);
+    }
+
+    loadReservedDates();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!buyRange?.from || !buyRange?.to) return;
+    const start = combineLocalDateAndTime(buyRange.from, buyStartTime);
+    const end = combineLocalDateAndTime(buyRange.to, buyEndTime);
+    setBuyStart(start.toISOString());
+    setBuyEnd(end.toISOString());
+  }, [buyEndTime, buyRange?.from, buyRange?.to, buyStartTime]);
 
   useEffect(() => {
     if (!id) {
@@ -405,6 +527,11 @@ export default function ListingPage() {
       setError("This listing is missing pricing information.");
       return;
     }
+    if (!buyRange?.from || !buyRange?.to) {
+      setError("Please select a start and end date.");
+      buyNowCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (!buyStart) {
       setError("Please choose a start date and time.");
       return;
@@ -445,8 +572,10 @@ export default function ListingPage() {
           },
           body: JSON.stringify({
             listingId: listing.id,
-            startDate: start.toISOString(),
-            endDate: end.toISOString(),
+            startDate: format(buyRange.from, "yyyy-MM-dd"),
+            endDate: format(buyRange.to, "yyyy-MM-dd"),
+            startTime: buyStartTime,
+            endTime: buyEndTime,
           }),
         },
       );
@@ -820,24 +949,37 @@ export default function ListingPage() {
                       Buy now
                     </p>
                     <div className="space-y-2">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Start date &amp; time
-                        <input
-                          type="datetime-local"
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          value={buyStart}
-                          onChange={(e) => setBuyStart(e.target.value)}
+                      <div ref={buyNowCardRef}>
+                        <BookingDateRangePicker
+                          value={buyRange}
+                          onChange={(next) => {
+                            setError(null);
+                            setBuyRange(next);
+                          }}
+                          reservedDates={reservedDates}
                         />
-                      </label>
-                      <label className="block text-xs font-medium text-slate-600">
-                        End date &amp; time
-                        <input
-                          type="datetime-local"
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          value={buyEnd}
-                          onChange={(e) => setBuyEnd(e.target.value)}
-                        />
-                      </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-xs font-medium text-slate-600">
+                          Start time
+                          <input
+                            type="time"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                            value={buyStartTime}
+                            onChange={(e) => setBuyStartTime(e.target.value)}
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-slate-600">
+                          End time
+                          <input
+                            type="time"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                            value={buyEndTime}
+                            onChange={(e) => setBuyEndTime(e.target.value)}
+                          />
+                        </label>
+                      </div>
                       {listing.rate_type && buyStart && buyEnd && (() => {
                         const durationUnits = computeDurationUnits(
                           new Date(buyStart),
@@ -852,11 +994,28 @@ export default function ListingPage() {
                           </p>
                         );
                       })()}
+                      {buyNowAvailability && (
+                        <p
+                          className={`mt-1 text-[11px] ${
+                            buyNowAvailability.status === "ok"
+                              ? "text-emerald-700"
+                              : "text-red-700"
+                          }`}
+                        >
+                          {buyNowAvailability.message}
+                        </p>
+                      )}
                     </div>
                     <button
                       className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
                       onClick={buyNow}
-                      disabled={submitting != null}
+                      disabled={
+                        submitting != null ||
+                        !buyRange?.from ||
+                        !buyRange?.to ||
+                        (buyNowAvailability != null &&
+                          buyNowAvailability.status !== "ok")
+                      }
                     >
                       {submitting === "buy" ? "Redirecting to checkout..." : "Buy Now"}
                     </button>

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 // Runs when `next build` loads this file — confirms which API URL is inlined into the client bundle.
 const apiUrlForBuild = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -14,7 +15,11 @@ if (apiUrlForBuild) {
 }
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Prevent monorepo/multi-lockfile root mis-detection in CI (e.g. Vercel).
+  outputFileTracingRoot: path.join(__dirname),
+  turbopack: {
+    root: path.join(__dirname),
+  },
 };
 
 export default nextConfig;

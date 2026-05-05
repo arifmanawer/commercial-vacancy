@@ -14,6 +14,8 @@ import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
 import VacancyInsights from "@/components/VacancyInsights";
 import ZoningInsights from "@/components/ZoningInsights";
 import TransitInsights from "@/components/TransitInsights";
+import BookingDateRangePicker from "@/components/BookingDateRangePicker";
+import type { DateRange } from "react-day-picker";
 
 type LandlordPublicInfo = {
   id: string;
@@ -55,6 +57,47 @@ function apiUserQuery(userId: string) {
   return `user_id=${encodeURIComponent(userId)}`;
 }
 
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(d: Date, days: number) {
+  const copy = new Date(d.getTime());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function enumerateDaysTouched(start: Date, end: Date) {
+  const days: Date[] = [];
+  const from = startOfDay(start);
+  const to = startOfDay(end);
+  const min = Math.min(from.getTime(), to.getTime());
+  const max = Math.max(from.getTime(), to.getTime());
+  let cursor = new Date(min);
+  while (cursor.getTime() <= max) {
+    days.push(new Date(cursor.getTime()));
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
+function parseHHMM(value: string) {
+  const m = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+  return { hh, mm };
+}
+
+function combineLocalDateAndTime(d: Date, timeHHMM: string) {
+  const parsed = parseHHMM(timeHHMM);
+  const hh = parsed?.hh ?? 0;
+  const mm = parsed?.mm ?? 0;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
+}
+
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -72,6 +115,10 @@ export default function ListingPage() {
   const [tourTime, setTourTime] = useState("");
   const [buyStart, setBuyStart] = useState("");
   const [buyEnd, setBuyEnd] = useState("");
+  const [buyRange, setBuyRange] = useState<DateRange | undefined>(undefined);
+  const [buyStartTime, setBuyStartTime] = useState("09:00");
+  const [buyEndTime, setBuyEndTime] = useState("17:00");
+  const [reservedDates, setReservedDates] = useState<Date[]>([]);
   const [submitting, setSubmitting] = useState<"tour" | "buy" | null>(null);
   const [startingConversation, setStartingConversation] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -86,6 +133,50 @@ export default function ListingPage() {
   const [mapError, setMapError] = useState<string | null>(null);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    async function loadReservedDates() {
+      const { data, error: bookingsError } = await supabasePublic
+        .from("bookings")
+        .select("start_datetime, end_datetime, status")
+        .eq("listing_id", id)
+        .in("status", ["pending_payment", "reserved", "active"]);
+
+      if (cancelled) return;
+      if (bookingsError) {
+        console.warn("reserved dates fetch error", bookingsError.message);
+        setReservedDates([]);
+        return;
+      }
+
+      const days: Date[] = [];
+      for (const row of data ?? []) {
+        const start = new Date((row as any).start_datetime);
+        const end = new Date((row as any).end_datetime);
+        const startMs = start.getTime();
+        const endMs = end.getTime();
+        if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
+        for (const d of enumerateDaysTouched(start, end)) days.push(d);
+      }
+      setReservedDates(days);
+    }
+
+    loadReservedDates();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!buyRange?.from || !buyRange?.to) return;
+    const start = combineLocalDateAndTime(buyRange.from, buyStartTime);
+    const end = combineLocalDateAndTime(buyRange.to, buyEndTime);
+    setBuyStart(start.toISOString());
+    setBuyEnd(end.toISOString());
+  }, [buyEndTime, buyRange?.from, buyRange?.to, buyStartTime]);
 
   useEffect(() => {
     if (!id) {
@@ -820,24 +911,35 @@ export default function ListingPage() {
                       Buy now
                     </p>
                     <div className="space-y-2">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Start date &amp; time
-                        <input
-                          type="datetime-local"
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          value={buyStart}
-                          onChange={(e) => setBuyStart(e.target.value)}
-                        />
-                      </label>
-                      <label className="block text-xs font-medium text-slate-600">
-                        End date &amp; time
-                        <input
-                          type="datetime-local"
-                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
-                          value={buyEnd}
-                          onChange={(e) => setBuyEnd(e.target.value)}
-                        />
-                      </label>
+                      <BookingDateRangePicker
+                        value={buyRange}
+                        onChange={(next) => {
+                          setError(null);
+                          setBuyRange(next);
+                        }}
+                        reservedDates={reservedDates}
+                      />
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-xs font-medium text-slate-600">
+                          Start time
+                          <input
+                            type="time"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                            value={buyStartTime}
+                            onChange={(e) => setBuyStartTime(e.target.value)}
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-slate-600">
+                          End time
+                          <input
+                            type="time"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+                            value={buyEndTime}
+                            onChange={(e) => setBuyEndTime(e.target.value)}
+                          />
+                        </label>
+                      </div>
                       {listing.rate_type && buyStart && buyEnd && (() => {
                         const durationUnits = computeDurationUnits(
                           new Date(buyStart),

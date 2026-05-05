@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { format } from "date-fns";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -131,6 +132,36 @@ export default function ListingPage() {
   const [mapCenter, setMapCenter] =
     useState<google.maps.LatLngLiteral | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
+  const buyNowCardRef = React.useRef<HTMLDivElement | null>(null);
+
+  const buyNowAvailability = React.useMemo(() => {
+    if (!listing || !listing.rate_type || !buyStart || !buyEnd) return null;
+    const start = new Date(buyStart);
+    const end = new Date(buyEnd);
+    const durationUnits = computeDurationUnits(start, end, listing.rate_type);
+    if (!durationUnits) {
+      return {
+        status: "invalid" as const,
+        message: "Please choose a valid start/end time window.",
+      };
+    }
+    if (listing.min_duration != null && durationUnits < listing.min_duration) {
+      return {
+        status: "invalid" as const,
+        message: `Minimum booking is ${listing.min_duration} ${listing.rate_type}.`,
+      };
+    }
+    if (listing.max_duration != null && durationUnits > listing.max_duration) {
+      return {
+        status: "invalid" as const,
+        message: `Maximum booking is ${listing.max_duration} ${listing.rate_type}.`,
+      };
+    }
+    return {
+      status: "ok" as const,
+      message: "Listing appears available for these dates.",
+    };
+  }, [listing, buyStart, buyEnd]);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
@@ -496,6 +527,11 @@ export default function ListingPage() {
       setError("This listing is missing pricing information.");
       return;
     }
+    if (!buyRange?.from || !buyRange?.to) {
+      setError("Please select a start and end date.");
+      buyNowCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (!buyStart) {
       setError("Please choose a start date and time.");
       return;
@@ -536,8 +572,10 @@ export default function ListingPage() {
           },
           body: JSON.stringify({
             listingId: listing.id,
-            startDate: start.toISOString(),
-            endDate: end.toISOString(),
+            startDate: format(buyRange.from, "yyyy-MM-dd"),
+            endDate: format(buyRange.to, "yyyy-MM-dd"),
+            startTime: buyStartTime,
+            endTime: buyEndTime,
           }),
         },
       );
@@ -911,14 +949,16 @@ export default function ListingPage() {
                       Buy now
                     </p>
                     <div className="space-y-2">
-                      <BookingDateRangePicker
-                        value={buyRange}
-                        onChange={(next) => {
-                          setError(null);
-                          setBuyRange(next);
-                        }}
-                        reservedDates={reservedDates}
-                      />
+                      <div ref={buyNowCardRef}>
+                        <BookingDateRangePicker
+                          value={buyRange}
+                          onChange={(next) => {
+                            setError(null);
+                            setBuyRange(next);
+                          }}
+                          reservedDates={reservedDates}
+                        />
+                      </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <label className="block text-xs font-medium text-slate-600">
@@ -954,11 +994,28 @@ export default function ListingPage() {
                           </p>
                         );
                       })()}
+                      {buyNowAvailability && (
+                        <p
+                          className={`mt-1 text-[11px] ${
+                            buyNowAvailability.status === "ok"
+                              ? "text-emerald-700"
+                              : "text-red-700"
+                          }`}
+                        >
+                          {buyNowAvailability.message}
+                        </p>
+                      )}
                     </div>
                     <button
                       className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
                       onClick={buyNow}
-                      disabled={submitting != null}
+                      disabled={
+                        submitting != null ||
+                        !buyRange?.from ||
+                        !buyRange?.to ||
+                        (buyNowAvailability != null &&
+                          buyNowAvailability.status !== "ok")
+                      }
                     >
                       {submitting === "buy" ? "Redirecting to checkout..." : "Buy Now"}
                     </button>

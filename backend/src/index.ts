@@ -10,6 +10,9 @@ import { stripeWebhookHandler } from './routes/stripeWebhook';
 
 const app = express();
 
+// API responses should not be cached (prevents 304/no-body issues for JSON endpoints).
+app.set('etag', false);
+
 // Security middleware
 app.use(helmet());
 app.use(
@@ -72,6 +75,12 @@ app.get('/test', (_req, res) => {
 });
 
 // API routes
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 app.use('/api', apiRoutes);
 
 // Error handling

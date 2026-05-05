@@ -25,12 +25,17 @@ export async function debugFetch(
   const label = opts?.label ?? "fetch";
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : "[request]";
   const method = (init?.method || "GET").toUpperCase();
+  const effectiveInit: RequestInit = {
+    ...(init ?? {}),
+    // Avoid 304/ETag flows for JSON API requests in production proxies/CDNs.
+    cache: init?.cache ?? "no-store",
+  };
   const startedAt = Date.now();
 
   emit("info", `[api:info] ${label}.start`, { method, url, userId: opts?.userId ?? null });
 
   try {
-    const res = await fetch(input, init);
+    const res = await fetch(input, effectiveInit);
     const elapsedMs = Date.now() - startedAt;
 
     // Best-effort: try to capture error payloads without consuming the body for callers that need it.

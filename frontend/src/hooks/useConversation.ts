@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ConversationSummary } from "./useConversations";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, withApiUserId } from "@/lib/api";
+import { debugFetch } from "@/lib/debugFetch";
 
 export interface Message {
   id: string;
@@ -59,11 +60,18 @@ export function useConversation(conversationId: string | null) {
 
   async function refreshConversation() {
     if (!user || !conversationId) return;
-    const res = await fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}`, {
+    const res = await debugFetch(
+      withApiUserId(
+        `${getApiUrl()}/api/messages/conversations/${conversationId}`,
+        user.id,
+      ),
+      {
       headers: {
         "X-User-Id": user.id,
       },
-    });
+      },
+      { label: "messages.conversations.get", userId: user.id },
+    );
     const json = (await res.json().catch(() => null)) as
       | { success?: boolean; data?: ConversationResponse; error?: string }
       | null;
@@ -90,13 +98,17 @@ export function useConversation(conversationId: string | null) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(
-          `${getApiUrl()}/api/messages/conversations/${conversationId}`,
+        const res = await debugFetch(
+          withApiUserId(
+            `${getApiUrl()}/api/messages/conversations/${conversationId}`,
+            user.id,
+          ),
           {
             headers: {
               "X-User-Id": user!.id,
             },
-          }
+          },
+          { label: "messages.conversations.get", userId: user.id },
         );
 
         const json = (await res.json().catch(() => null)) as
@@ -122,12 +134,19 @@ export function useConversation(conversationId: string | null) {
         }
 
         if (json.data.conversation.unread_count > 0) {
-          await fetch(`${getApiUrl()}/api/messages/conversations/${conversationId}/read`, {
-            method: "POST",
-            headers: {
-              "X-User-Id": user.id,
+          await debugFetch(
+            withApiUserId(
+              `${getApiUrl()}/api/messages/conversations/${conversationId}/read`,
+              user.id,
+            ),
+            {
+              method: "POST",
+              headers: {
+                "X-User-Id": user.id,
+              },
             },
-          });
+            { label: "messages.conversations.read", userId: user.id },
+          );
           if (!cancelled) {
             setConversation((prev) =>
               prev

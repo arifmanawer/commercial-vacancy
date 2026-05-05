@@ -7,7 +7,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, withApiUserId } from "@/lib/api";
+import { debugFetch } from "@/lib/debugFetch";
 
 const ROLES = [
   {
@@ -180,14 +181,14 @@ export default function ProfilePage() {
           ? { is_landlord: checked }
           : { is_contractor: checked };
 
-      const res = await fetch(`${getApiUrl()}/api/profiles/roles`, {
+      const res = await debugFetch(withApiUserId(`${getApiUrl()}/api/profiles/roles`, user.id), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "X-User-Id": user.id,
         },
         body: JSON.stringify(body),
-      });
+      }, { label: "profiles.roles.patch", userId: user.id });
 
       const data = (await res.json().catch(() => null)) as
         | { success?: boolean; error?: string }
@@ -219,13 +220,17 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`${getApiUrl()}/api/stripe/connect/onboarding`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+      const res = await debugFetch(
+        withApiUserId(`${getApiUrl()}/api/stripe/connect/onboarding`, user.id),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": user.id,
+          },
         },
-      });
+        { label: "stripe.connect.onboarding", userId: user.id },
+      );
 
       const data = (await res.json().catch(() => null)) as
         | { success?: boolean; data?: { onboarding_url: string }; error?: string }

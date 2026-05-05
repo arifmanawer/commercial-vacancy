@@ -1,5 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import { withApiUserId } from './api';
+import { debugFetch } from './debugFetch';
 
 /**
  * Supabase browser client for use in Client Components.
@@ -60,9 +62,9 @@ export async function fetchCurrentUserFromApi() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) return null;
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL?.trim() || '').replace(/\/+$/, '');
-  const res = await fetch(`${apiUrl}/api/users`, {
+  const res = await debugFetch(withApiUserId(`${apiUrl}/api/users`, session.user.id), {
     headers: { 'X-User-Id': session.user.id },
-  });
+  }, { label: "users.me.lookup", userId: session.user.id });
   if (!res.ok) return null;
   const json = await res.json();
   return json.user;

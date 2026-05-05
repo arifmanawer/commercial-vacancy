@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
+import { authDebug } from "@/lib/authDebug";
 import type { Profile } from "@/types/database";
 
 type AuthState = {
@@ -61,12 +62,21 @@ function clearSupabaseAuthCookiesAndStorage() {
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
+  authDebug.info("profile.fetch.start", { userId });
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", userId)
     .single();
-  if (error || !data) return null;
+  if (error || !data) {
+    authDebug.warn("profile.fetch.miss", {
+      userId,
+      error: error?.message ?? null,
+      hasData: Boolean(data),
+    });
+    return null;
+  }
+  authDebug.info("profile.fetch.ok", { userId });
   return data as Profile;
 }
 
@@ -128,15 +138,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
+          authDebug.info("profile.resolve.attempt", { userId, attempt, retries });
           const p = await resolveProfile(userId);
           return p;
         } catch (err) {
           lastErr = err;
+          authDebug.warn("profile.resolve.error", {
+            userId,
+            attempt,
+            message: err instanceof Error ? err.message : String(err),
+          });
           // A common reason for a first-load miss is an expired access token that
           // gets refreshed shortly after startup. Try a refresh once per attempt.
           try {
+            authDebug.info("session.refresh.start", { userId, attempt });
             await supabase.auth.refreshSession();
+            authDebug.info("session.refresh.ok", { userId, attempt });
           } catch {
+            authDebug.warn("session.refresh.error", { userId, attempt });
             // ignore refresh errors; we'll still retry resolveProfile
           }
           if (attempt < retries) {
@@ -154,9 +173,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
+      authDebug.info("startup.getSession.start");
       try {
-        const { data: { session: s } } = await supabase.auth.getSession();
+        const {
+          data: { session: s },
+          error,
+        } = await supabase.auth.getSession();
+        if (error) {
+          authDebug.error("startup.getSession.error", { message: error.message });
+        }
         if (cancelled) return;
+        authDebug.info("startup.getSession.ok", {
+          hasSession: Boolean(s),
+          userId: s?.user?.id ?? null,
+        });
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user?.id) {
@@ -171,13 +201,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } finally {
         if (!cancelled) setLoading(false);
+        authDebug.info("startup.getSession.done", { cancelled });
       }
     })();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    } = supabase.auth.onAuthStateChange(async (event, s) => {
       try {
+        authDebug.info("auth.onAuthStateChange", {
+          event,
+          hasSession: Boolean(s),
+          userId: s?.user?.id ?? null,
+        });
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user?.id) {
@@ -188,7 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setLoading(false);
       } catch (err) {
-        console.warn("[auth] onAuthStateChange handler error (keeping session)", err);
+        authDebug.error("auth.onAuthStateChange.error", {
+          message: err instanceof Error ? err.message : String(err),
+        });
         setLoading(false);
       }
     });
@@ -201,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     const SIGN_OUT_WAIT_MS = 10_000;
+    authDebug.info("signOut.start");
     try {
       await Promise.race([
         supabase.auth.signOut({ scope: "global" }),
@@ -214,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Clear storage in finally (lock timeout, network, etc.)
     } finally {
+      authDebug.info("signOut.cleanup");
       clearSupabaseAuthCookiesAndStorage();
       profileResultCacheRef.current = null;
       profileInflightRef.current.clear();

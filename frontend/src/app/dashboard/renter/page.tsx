@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { withTimeout } from "@/lib/withTimeout";
 import { useConversations } from "@/hooks/useConversations";
 import { clientDebug } from "@/lib/clientDebug";
+import { getApiUrl, withApiUserId } from "@/lib/api";
+import { debugFetch } from "@/lib/debugFetch";
 
 type BookingStatus =
   | "pending_payment"
@@ -57,270 +59,98 @@ export default function RenterDashboardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSaved() {
+    async function loadDashboard() {
       setError(null);
 
       if (!userId) {
         setSavedListings([]);
+        setInquiries([]);
+        setListings([]);
+        setUpcomingBookingsCount(0);
         return;
       }
 
       setLoadingSaved(true);
+      setLoadingInquiries(true);
+      setLoadingBookingsCount(true);
       try {
-        clientDebug.info("renter.dashboard.saved.start", { userId });
+        clientDebug.info("renter.dashboard.load.start", { userId });
         const startedAt = Date.now();
-        const { data, error: savedError } = await withTimeout(
-          supabase
-            .from("saved_listings")
-            .select("property_id")
-            .eq("user_id", userId),
-          8000,
-          "Loading saved listings",
+        const res = await withTimeout(
+          debugFetch(
+            withApiUserId(`${getApiUrl()}/api/renters/dashboard`, userId),
+            { headers: { "X-User-Id": userId } },
+            { label: "renters.dashboard", userId },
+          ),
+          15_000,
+          "Loading renter dashboard",
         );
 
-        if (savedError) {
-          if (!cancelled) {
-            clientDebug.warn("renter.dashboard.saved.error", {
-              userId,
-              message: savedError.message,
-            });
-            setError(savedError.message ?? "Unable to load saved spaces.");
-          }
-          return;
+        const json = (await res.json().catch(() => null)) as
+          | {
+              success?: boolean;
+              data?: {
+                savedListings?: SavedListing[];
+                inquiries?: any[];
+                listings?: any[];
+                upcomingBookingsCount?: number;
+              };
+              error?: string;
+            }
+          | null;
+
+        if (!res.ok || !json?.success || !json.data) {
+          throw new Error(json?.error || "Unable to load renter dashboard.");
         }
 
-        const propertyIds =
-          data?.map((r: any) => r.property_id).filter(Boolean) ?? [];
+        if (cancelled) return;
+        setSavedListings(json.data.savedListings ?? []);
+        setInquiries(json.data.inquiries ?? []);
+        setListings(json.data.listings ?? []);
+        setUpcomingBookingsCount(json.data.upcomingBookingsCount ?? 0);
 
-        if (propertyIds.length === 0) {
-          if (!cancelled) setSavedListings([]);
-          return;
-        }
-
-        const { data: listingRows, error: listingsError } = await withTimeout(
-          supabase
-            .from("listings")
-            .select(
-              "id, title, city, state, property_type, rate_type, rate_amount, min_duration, max_duration",
-            )
-            .in("id", propertyIds),
-          8000,
-          "Loading listings",
-        );
-
-        if (listingsError) {
-          if (!cancelled) {
-            setError(listingsError.message ?? "Unable to load saved spaces.");
-          }
-          return;
-        }
-
-        const { data: imgRows } = await withTimeout(
-          supabase
-            .from("listings_images")
-            .select("property_id, image_url")
-            .in("property_id", propertyIds),
-          8000,
-          "Loading listing images",
-        );
-
-        const imgMap = new Map<string, any>();
-        (imgRows ?? []).forEach((r: any) => imgMap.set(r.property_id, r));
-
-        const view: SavedListing[] =
-          listingRows?.map((r: any) => {
-            return {
-              id: r.id,
-              title: r.title,
-              city: r.city,
-              state: r.state,
-              property_type: r.property_type,
-              rate_amount: r.rate_amount ?? null,
-              rate_type: r.rate_type ?? null,
-              image: imgMap.get(r.id)?.image_url?.[0] ?? null,
-            };
-          }) ?? [];
-
-        if (!cancelled) {
-          setSavedListings(view);
-        }
-        clientDebug.info("renter.dashboard.saved.done", {
+        clientDebug.info("renter.dashboard.load.done", {
           userId,
           elapsedMs: Date.now() - startedAt,
-          count: view.length,
+          savedCount: (json.data.savedListings ?? []).length,
+          inquiriesCount: (json.data.inquiries ?? []).length,
+          upcomingBookingsCount: json.data.upcomingBookingsCount ?? 0,
         });
       } catch (err) {
         if (!cancelled) {
-          const msg = err instanceof Error ? err.message : "Unable to load saved spaces.";
-          clientDebug.error("renter.dashboard.saved.exception", { userId, message: msg });
-          setError(msg || "Unable to load saved spaces.");
-        }
-      } finally {
-        if (!cancelled) setLoadingSaved(false);
-      }
-    }
-
-    loadSaved();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadBookingsCount() {
-      setLoadingBookingsCount(true);
-      try {
-        if (!userId) {
-          setUpcomingBookingsCount(0);
-          return;
-        }
-        clientDebug.info("renter.dashboard.bookingsCount.start", { userId });
-
-        const activeStatuses: BookingStatus[] = [
-          "pending_payment",
-          "reserved",
-          "active",
-        ];
-
-        const { data, error } = await withTimeout(
-          supabase
-            .from("bookings")
-            .select("id, renter_id, start_datetime, end_datetime, status")
-            .eq("renter_id", userId)
-            .in("status", activeStatuses),
-          8000,
-          "Loading bookings",
-        );
-
-        if (cancelled) return;
-
-        if (error) {
-          // Keep dashboard functional; reservations page will show detailed errors.
-          clientDebug.warn("renter.dashboard.bookingsCount.error", { userId, message: error.message });
-          setUpcomingBookingsCount(0);
-          return;
-        }
-
-        const now = Date.now();
-        const rows = (data ?? []) as BookingRow[];
-        const count = rows.filter((b) => {
-          const end = new Date(b.end_datetime).getTime();
-          return Number.isFinite(end) && end >= now;
-        }).length;
-
-        setUpcomingBookingsCount(count);
-      } catch {
-        if (cancelled) return;
-        // Keep dashboard functional; reservations page will show detailed errors.
-        clientDebug.error("renter.dashboard.bookingsCount.exception", { userId });
-        setUpcomingBookingsCount(0);
-      } finally {
-        if (!cancelled) setLoadingBookingsCount(false);
-      }
-    }
-
-    loadBookingsCount();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) {
-      setInquiries([]);
-      setListings([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadInquiries() {
-      setInquiriesError(null);
-      setLoadingInquiries(true);
-      try {
-        clientDebug.info("renter.dashboard.inquiries.start", { userId });
-        const { data: inquiryRows, error: inquiryError } = await withTimeout(
-          supabase
-            .from("listing_inquiries")
-            .select(
-              "id, listing_id, type, message, preferred_time, status, landlord_message, landlord_suggested_time, created_at, resolved_at",
-            )
-            .eq("renter_id", userId)
-            .order("created_at", { ascending: false }),
-          8000,
-          "Loading inquiries",
-        );
-
-        if (cancelled) return;
-
-        if (inquiryError) {
-          clientDebug.warn("renter.dashboard.inquiries.error", { userId, message: inquiryError.message });
-          setInquiriesError(
-            inquiryError.message ||
-              "Could not load your interest or tour requests.",
-          );
+          const msg =
+            err instanceof Error ? err.message : "Unable to load renter dashboard.";
+          clientDebug.error("renter.dashboard.load.exception", { userId, message: msg });
+          setError(msg || "Unable to load renter dashboard.");
+          setSavedListings([]);
           setInquiries([]);
           setListings([]);
-          return;
+          setUpcomingBookingsCount(0);
         }
-
-        const safeInquiries = inquiryRows || [];
-        setInquiries(safeInquiries);
-
-        const listingIds = Array.from(
-          new Set(
-            safeInquiries.map((inq: any) => inq.listing_id).filter(Boolean),
-          ),
-        );
-
-        if (!listingIds.length) {
-          setListings([]);
-          return;
-        }
-
-        const { data: listingRows, error: listingError } = await withTimeout(
-          supabase
-            .from("listings")
-            .select("id, title, city, state, property_type")
-            .in("id", listingIds),
-          8000,
-          "Loading inquiry listings",
-        );
-
-        if (cancelled) return;
-
-        if (listingError) {
-          clientDebug.warn("renter.dashboard.inquiryListings.error", { userId, message: listingError.message });
-          setInquiriesError(
-            listingError.message ||
-              "Could not load listings for your requests.",
-          );
-          setListings([]);
-        } else {
-          setListings(listingRows || []);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "Could not load your interest or tour requests.";
-        clientDebug.error("renter.dashboard.inquiries.exception", { userId, message: msg });
-        setInquiriesError(msg || "Could not load your interest or tour requests.");
-        setInquiries([]);
-        setListings([]);
       } finally {
-        if (!cancelled) setLoadingInquiries(false);
+        if (!cancelled) {
+          setLoadingSaved(false);
+          setLoadingInquiries(false);
+          setLoadingBookingsCount(false);
+        }
       }
     }
 
-    loadInquiries();
-
+    loadDashboard();
     return () => {
       cancelled = true;
     };
+  }, [userId]);
+
+  useEffect(() => {
+    // Bookings count is loaded by the consolidated backend endpoint.
+    setLoadingBookingsCount(false);
+  }, [userId]);
+
+  useEffect(() => {
+    // Inquiries are loaded by the consolidated backend endpoint.
+    setLoadingInquiries(false);
+    setInquiriesError(null);
   }, [userId]);
 
   const updateInquiry = async (

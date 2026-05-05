@@ -11,6 +11,7 @@ import stripeConnectRoutes from './stripeConnect';
 import offerRoutes from './offers';
 import bookingRoutes from './bookings';
 import devRoutes from './dev';
+import renterRoutes from './renters';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.use('/contractor-jobs', contractorJobsRoutes);
 router.use('/stripe', stripeConnectRoutes);
 router.use('/offers', offerRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/renters', renterRoutes);
 
 // Dev-only testing routes (hidden in production)
 router.use('/dev', devRoutes);

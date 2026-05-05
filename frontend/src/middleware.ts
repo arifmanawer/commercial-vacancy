@@ -4,6 +4,14 @@ import { NextResponse, type NextRequest } from "next/server";
 const protectedPaths = ["/dashboard", "/profile", "/list"];
 const authPaths = ["/signin", "/signup"];
 
+type CookiesToSet = Array<{
+  name: string;
+  value: string;
+  options?: Parameters<
+    InstanceType<typeof NextResponse>["cookies"]["set"]
+  >[2];
+}>;
+
 function isProtected(pathname: string) {
   return protectedPaths.some((p) => pathname.startsWith(p));
 }
@@ -29,7 +37,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: CookiesToSet) {
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);

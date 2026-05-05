@@ -18,7 +18,15 @@ const navLinks = [
   { href: "/map", label: "Map" },
 ];
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({
+  href,
+  label,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  onClick?: () => void;
+}) {
   const pathname = usePathname();
   const isHome = href === "/";
   const isActive = isHome
@@ -28,6 +36,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`
         text-[13px] font-medium transition-all duration-150 px-2.5 py-1.5 rounded-md
         focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/20 focus:ring-offset-1
@@ -159,14 +168,12 @@ export default function Navbar() {
         <div className="lg:hidden absolute top-full left-4 right-4 mt-2 bg-white rounded-xl border border-slate-200/80 shadow-lg py-2 z-50">
           <div className="flex flex-col max-h-[70vh] overflow-y-auto">
             {navLinks.map((link) => (
-              <Link
+              <NavLink
                 key={link.href}
                 href={link.href}
+                label={link.label}
                 onClick={() => setMobileOpen(false)}
-                className="block"
-              >
-                <NavLink href={link.href} label={link.label} />
-              </Link>
+              />
             ))}
           </div>
         </div>

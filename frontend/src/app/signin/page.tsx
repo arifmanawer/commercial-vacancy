@@ -7,6 +7,7 @@ import Navbar from "../../components/Navbar";
 import Footer from "../../components/Footer";
 import { supabase } from "../../lib/supabaseClient";
 import { logAuthEvent } from "../../lib/authLogger";
+import { clientDebug } from "@/lib/clientDebug";
 
 function SignInContent() {
   const router = useRouter();
@@ -22,7 +23,15 @@ function SignInContent() {
     setError("");
     setLoading(true);
     try {
+      clientDebug.info("signin.submit", { email, redirectTo });
+      const startedAt = Date.now();
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      clientDebug.info("signin.result", {
+        elapsedMs: Date.now() - startedAt,
+        hasSession: Boolean(data?.session),
+        hasUser: Boolean(data?.user),
+        error: authError?.message ?? null,
+      });
       if (authError) {
         logAuthEvent("signin", email, false, authError.message);
         setError(authError.message ?? "Sign in failed. Please try again.");
@@ -30,14 +39,19 @@ function SignInContent() {
       }
       if (data.session) {
         logAuthEvent("signin", email, true);
+        clientDebug.info("signin.navigate", { redirectTo });
         router.push(redirectTo);
         router.refresh();
       }
     } catch (err) {
       logAuthEvent("signin", email, false, String(err));
+      clientDebug.error("signin.exception", {
+        message: err instanceof Error ? err.message : String(err),
+      });
       setError("Sign in failed. Please try again.");
     } finally {
       setLoading(false);
+      clientDebug.info("signin.finally", { loading: false });
     }
   };
 

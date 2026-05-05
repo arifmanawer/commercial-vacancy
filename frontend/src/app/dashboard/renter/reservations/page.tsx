@@ -8,6 +8,7 @@ import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { withTimeout } from "@/lib/withTimeout";
+import { clientDebug } from "@/lib/clientDebug";
 
 type BookingStatus =
   | "pending_payment"
@@ -116,6 +117,8 @@ export default function RenterReservationsPage() {
         if (!userId) {
           return;
         }
+        clientDebug.info("renter.reservations.load.start", { userId });
+        const startedAt = Date.now();
 
         const { data: bookingRows, error: bookingError } = await withTimeout(
           supabase
@@ -132,6 +135,10 @@ export default function RenterReservationsPage() {
         if (cancelled) return;
 
         if (bookingError) {
+          clientDebug.warn("renter.reservations.bookings.error", {
+            userId,
+            message: bookingError.message,
+          });
           setError(
             bookingError.message || "Could not load your reservations right now.",
           );
@@ -181,9 +188,15 @@ export default function RenterReservationsPage() {
         });
 
         setBookings(mapped);
+        clientDebug.info("renter.reservations.load.done", {
+          userId,
+          elapsedMs: Date.now() - startedAt,
+          bookings: mapped.length,
+        });
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
+        clientDebug.error("renter.reservations.load.exception", { userId, message: msg });
         setBookings([]);
         setError(
           msg.includes("timed out")

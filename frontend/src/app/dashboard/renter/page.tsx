@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { withTimeout } from "@/lib/withTimeout";
 import { useConversations } from "@/hooks/useConversations";
+import { clientDebug } from "@/lib/clientDebug";
 
 type BookingStatus =
   | "pending_payment"
@@ -66,6 +67,8 @@ export default function RenterDashboardPage() {
 
       setLoadingSaved(true);
       try {
+        clientDebug.info("renter.dashboard.saved.start", { userId });
+        const startedAt = Date.now();
         const { data, error: savedError } = await withTimeout(
           supabase
             .from("saved_listings")
@@ -77,6 +80,10 @@ export default function RenterDashboardPage() {
 
         if (savedError) {
           if (!cancelled) {
+            clientDebug.warn("renter.dashboard.saved.error", {
+              userId,
+              message: savedError.message,
+            });
             setError(savedError.message ?? "Unable to load saved spaces.");
           }
           return;
@@ -137,9 +144,15 @@ export default function RenterDashboardPage() {
         if (!cancelled) {
           setSavedListings(view);
         }
+        clientDebug.info("renter.dashboard.saved.done", {
+          userId,
+          elapsedMs: Date.now() - startedAt,
+          count: view.length,
+        });
       } catch (err) {
         if (!cancelled) {
           const msg = err instanceof Error ? err.message : "Unable to load saved spaces.";
+          clientDebug.error("renter.dashboard.saved.exception", { userId, message: msg });
           setError(msg || "Unable to load saved spaces.");
         }
       } finally {
@@ -163,6 +176,7 @@ export default function RenterDashboardPage() {
           setUpcomingBookingsCount(0);
           return;
         }
+        clientDebug.info("renter.dashboard.bookingsCount.start", { userId });
 
         const activeStatuses: BookingStatus[] = [
           "pending_payment",
@@ -184,6 +198,7 @@ export default function RenterDashboardPage() {
 
         if (error) {
           // Keep dashboard functional; reservations page will show detailed errors.
+          clientDebug.warn("renter.dashboard.bookingsCount.error", { userId, message: error.message });
           setUpcomingBookingsCount(0);
           return;
         }
@@ -199,6 +214,7 @@ export default function RenterDashboardPage() {
       } catch {
         if (cancelled) return;
         // Keep dashboard functional; reservations page will show detailed errors.
+        clientDebug.error("renter.dashboard.bookingsCount.exception", { userId });
         setUpcomingBookingsCount(0);
       } finally {
         if (!cancelled) setLoadingBookingsCount(false);
@@ -224,6 +240,7 @@ export default function RenterDashboardPage() {
       setInquiriesError(null);
       setLoadingInquiries(true);
       try {
+        clientDebug.info("renter.dashboard.inquiries.start", { userId });
         const { data: inquiryRows, error: inquiryError } = await withTimeout(
           supabase
             .from("listing_inquiries")
@@ -239,6 +256,7 @@ export default function RenterDashboardPage() {
         if (cancelled) return;
 
         if (inquiryError) {
+          clientDebug.warn("renter.dashboard.inquiries.error", { userId, message: inquiryError.message });
           setInquiriesError(
             inquiryError.message ||
               "Could not load your interest or tour requests.",
@@ -274,6 +292,7 @@ export default function RenterDashboardPage() {
         if (cancelled) return;
 
         if (listingError) {
+          clientDebug.warn("renter.dashboard.inquiryListings.error", { userId, message: listingError.message });
           setInquiriesError(
             listingError.message ||
               "Could not load listings for your requests.",
@@ -288,6 +307,7 @@ export default function RenterDashboardPage() {
           err instanceof Error
             ? err.message
             : "Could not load your interest or tour requests.";
+        clientDebug.error("renter.dashboard.inquiries.exception", { userId, message: msg });
         setInquiriesError(msg || "Could not load your interest or tour requests.");
         setInquiries([]);
         setListings([]);

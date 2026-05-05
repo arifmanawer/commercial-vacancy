@@ -63,7 +63,11 @@ export async function debugFetch(
     return res;
   } catch (err) {
     const elapsedMs = Date.now() - startedAt;
-    emit("error", `[api:error] ${label}.error`, {
+    const isAbort =
+      (err instanceof DOMException && err.name === "AbortError") ||
+      (err instanceof Error &&
+        (err.name === "AbortError" || err.message.toLowerCase().includes("aborted")));
+    emit(isAbort ? "warn" : "error", `[api:${isAbort ? "warn" : "error"}] ${label}.error`, {
       method,
       url,
       elapsedMs,

@@ -12,7 +12,7 @@ function isAuthPath(pathname: string) {
   return authPaths.some((p) => pathname === p);
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -23,26 +23,19 @@ export async function proxy(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(
-          cookiesToSet: Array<{
-            name: string;
-            value: string;
-            options: any;
-          }>
-        ) {
-          // Keep request cookies in sync so this request uses refreshed auth,
-          // then write the same cookies to the outgoing response.
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          );
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });
         },
       },
-    }
+    },
   );
 
-  // Use getUser() - validates JWT; getSession() can be spoofed
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -53,7 +46,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(signin);
   }
 
-  // /list and /dashboard/landlord require landlord; /dashboard/contractor requires contractor
   const listPath = "/list";
   const landlordDashboardPath = "/dashboard/landlord";
   const contractorDashboardPath = "/dashboard/contractor";
@@ -72,10 +64,18 @@ export async function proxy(request: NextRequest) {
     if (pathname === listPath && profile && !profile.is_landlord) {
       return NextResponse.redirect(new URL("/profile?upgrade=1", request.url));
     }
-    if (pathname.startsWith(landlordDashboardPath) && profile && !profile.is_landlord) {
+    if (
+      pathname.startsWith(landlordDashboardPath) &&
+      profile &&
+      !profile.is_landlord
+    ) {
       return NextResponse.redirect(new URL("/dashboard/renter", request.url));
     }
-    if (pathname.startsWith(contractorDashboardPath) && profile && !profile.is_contractor) {
+    if (
+      pathname.startsWith(contractorDashboardPath) &&
+      profile &&
+      !profile.is_contractor
+    ) {
       return NextResponse.redirect(new URL("/dashboard/renter", request.url));
     }
   }
@@ -91,6 +91,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/dashboard/:path*",
+    "/profile",
+    "/profile/:path*",
+    "/list",
+    "/list/:path*",
+    "/signin",
+    "/signup",
   ],
 };

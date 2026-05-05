@@ -50,6 +50,11 @@ function formatMoney(value: number | null) {
   }).format(value);
 }
 
+/** Backend accepts `user_id` query param as fallback when `X-User-Id` is stripped (some proxies/CDNs). */
+function apiUserQuery(userId: string) {
+  return `user_id=${encodeURIComponent(userId)}`;
+}
+
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -185,11 +190,14 @@ export default function ListingPage() {
     async function pollBooking(requestUserId: string) {
       attempts += 1;
       try {
-        const res = await fetch(`${getApiUrl()}/api/bookings/${bookingId}`, {
-          headers: {
-            "X-User-Id": requestUserId,
+        const res = await fetch(
+          `${getApiUrl()}/api/bookings/${bookingId}?${apiUserQuery(requestUserId)}`,
+          {
+            headers: {
+              "X-User-Id": requestUserId,
+            },
           },
-        });
+        );
         const json = (await res.json().catch(() => null)) as
           | { success?: boolean; data?: { status?: string }; error?: string }
           | null;
@@ -224,14 +232,17 @@ export default function ListingPage() {
     setFeedback("Payment received — confirming your reservation…");
     // Ask the backend to confirm the Checkout Session (fallback when webhooks can't reach local dev).
     if (sessionId) {
-      fetch(`${getApiUrl()}/api/bookings/confirm-checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": userId,
+      fetch(
+        `${getApiUrl()}/api/bookings/confirm-checkout?${apiUserQuery(userId)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": userId,
+          },
+          body: JSON.stringify({ sessionId, bookingId }),
         },
-        body: JSON.stringify({ sessionId, bookingId }),
-      }).catch(() => null);
+      ).catch(() => null);
     }
 
     pollBooking(userId);
@@ -424,18 +435,21 @@ export default function ListingPage() {
     setFeedback(null);
 
     try {
-      const res = await fetch(`${getApiUrl()}/api/bookings/buy-now`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+      const res = await fetch(
+        `${getApiUrl()}/api/bookings/buy-now?${apiUserQuery(user.id)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": user.id,
+          },
+          body: JSON.stringify({
+            listingId: listing.id,
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+          }),
         },
-        body: JSON.stringify({
-          listingId: listing.id,
-          startDate: start.toISOString(),
-          endDate: end.toISOString(),
-        }),
-      });
+      );
 
       const json = (await res.json().catch(() => null)) as
         | { success?: boolean; data?: { checkoutUrl?: string }; error?: string }
@@ -513,18 +527,21 @@ export default function ListingPage() {
       setFeedback(null);
       setError(null);
       setStartingConversation(true);
-      const res = await fetch(`${getApiUrl()}/api/messages/conversations`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+      const res = await fetch(
+        `${getApiUrl()}/api/messages/conversations?${apiUserQuery(user.id)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": user.id,
+          },
+          body: JSON.stringify({
+            contextType: "listing",
+            listingId: id,
+            participantIds: [user.id, listing.landlord_user_id],
+          }),
         },
-        body: JSON.stringify({
-          contextType: "listing",
-          listingId: id,
-          participantIds: [user.id, listing.landlord_user_id],
-        }),
-      });
+      );
 
       const json = (await res.json().catch(() => null)) as
         | { success?: boolean; data?: { id: string }; error?: string }

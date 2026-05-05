@@ -6,9 +6,10 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardProfile from "@/components/DashboardProfile";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabaseClient";
 import { withTimeout } from "@/lib/withTimeout";
 import { clientDebug } from "@/lib/clientDebug";
+import { getApiUrl, withApiUserId } from "@/lib/api";
+import { debugFetch } from "@/lib/debugFetch";
 
 type BookingStatus =
   | "pending_payment"
@@ -120,78 +121,32 @@ export default function RenterReservationsPage() {
         clientDebug.info("renter.reservations.load.start", { userId });
         const startedAt = Date.now();
 
-        const { data: bookingRows, error: bookingError } = await withTimeout(
-          supabase
-            .from("bookings")
-            .select(
-              "id, listing_id, landlord_id, renter_id, start_datetime, end_datetime, status, currency, total_amount, created_at",
-            )
-            .eq("renter_id", userId)
-            .order("start_datetime", { ascending: true }),
-          12_000,
+        const res = await withTimeout(
+          debugFetch(
+            withApiUserId(`${getApiUrl()}/api/renters/reservations`, userId),
+            { headers: { "X-User-Id": userId } },
+            { label: "renters.reservations", userId },
+          ),
+          20_000,
           "Reservations: bookings",
         );
 
-        if (cancelled) return;
+        const json = (await res.json().catch(() => null)) as
+          | { success?: boolean; data?: BookingView[]; error?: string }
+          | null;
 
-        if (bookingError) {
-          clientDebug.warn("renter.reservations.bookings.error", {
-            userId,
-            message: bookingError.message,
-          });
-          setError(
-            bookingError.message || "Could not load your reservations right now.",
+        if (!res.ok || !json?.success) {
+          throw new Error(
+            json?.error || "Could not load your reservations right now.",
           );
-          return;
         }
-
-        const rows = (bookingRows ?? []) as BookingRow[];
-        const listingIds = Array.from(
-          new Set(rows.map((b) => b.listing_id).filter(Boolean)),
-        );
-
-        if (listingIds.length === 0) {
-          setBookings([]);
-          return;
-        }
-
-        const { data: listingRows } = await withTimeout(
-          supabase
-            .from("listings")
-            .select("id, title, city, state, property_type")
-            .in("id", listingIds),
-          12_000,
-          "Reservations: listings",
-        );
-
-        const { data: imgRows } = await withTimeout(
-          supabase
-            .from("listings_images")
-            .select("property_id, image_url")
-            .in("property_id", listingIds),
-          12_000,
-          "Reservations: listings_images",
-        );
 
         if (cancelled) return;
-
-        const listingMap = new Map<string, ListingRow>();
-        (listingRows ?? []).forEach((l: any) => listingMap.set(l.id, l));
-
-        const imageMap = new Map<string, ImageRow>();
-        (imgRows ?? []).forEach((r: any) => imageMap.set(r.property_id, r));
-
-        const mapped = rows.map((b) => {
-          const listing = listingMap.get(b.listing_id) ?? null;
-          const image = imageMap.get(b.listing_id)?.image_url?.[0] ?? null;
-          return { ...b, listing, image };
-        });
-
-        setBookings(mapped);
+        setBookings(json.data ?? []);
         clientDebug.info("renter.reservations.load.done", {
           userId,
           elapsedMs: Date.now() - startedAt,
-          bookings: mapped.length,
+          bookings: (json.data ?? []).length,
         });
       } catch (err) {
         if (cancelled) return;

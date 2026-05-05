@@ -34,13 +34,20 @@ export default function ConversationPage() {
   const [offerRateAmount, setOfferRateAmount] = useState("");
   const [offerRateType, setOfferRateType] = useState("");
   const [offerNotes, setOfferNotes] = useState("");
+  const [offerFormError, setOfferFormError] = useState<string | null>(null);
   const [offerSubmitting, setOfferSubmitting] = useState(false);
   const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
   const [offerHistory, setOfferHistory] = useState<OfferModel[]>([]);
   const [offerHistoryLoading, setOfferHistoryLoading] = useState(false);
 
+  const effectiveRateType = useMemo(() => {
+    const override = offerRateType.trim().toLowerCase();
+    if (override) return override;
+    return latestOffer?.rate_type?.toLowerCase() || "";
+  }, [offerRateType, latestOffer?.rate_type]);
+
   const durationUnitLabel = useMemo(() => {
-    const normalized = offerRateType.trim().toLowerCase();
+    const normalized = effectiveRateType;
     switch (normalized) {
       case "hourly":
         return "hours";
@@ -51,9 +58,9 @@ export default function ConversationPage() {
       case "daily":
         return "days";
       default:
-        return "units";
+        return "listing rate units";
     }
-  }, [offerRateType]);
+  }, [effectiveRateType]);
 
   const isLandlordInConversation = useMemo(() => {
     if (!conversation || !user) return false;
@@ -178,10 +185,20 @@ export default function ConversationPage() {
     e.preventDefault();
     if (!user || !id || !conversation) return;
     if (!offerStart || !offerDuration) return;
+    setOfferFormError(null);
 
     const duration = Number(offerDuration);
     if (!Number.isFinite(duration) || duration <= 0) {
       alert("Duration must be a positive number.");
+      return;
+    }
+
+    const rateAmountInput = offerRateAmount.trim();
+    const rateTypeInput = offerRateType.trim();
+    const hasRateAmountOverride = rateAmountInput.length > 0;
+    const hasRateTypeOverride = rateTypeInput.length > 0;
+    if (hasRateAmountOverride !== hasRateTypeOverride) {
+      setOfferFormError("Enter both rate type and rate amount.");
       return;
     }
 
@@ -209,11 +226,9 @@ export default function ConversationPage() {
         startDate: offerStart,
         duration,
       };
-      if (offerRateAmount.trim()) {
-        payload.rateAmount = Number(offerRateAmount);
-      }
-      if (offerRateType.trim()) {
-        payload.rateType = offerRateType.trim();
+      if (hasRateAmountOverride && hasRateTypeOverride) {
+        payload.rateAmount = Number(rateAmountInput);
+        payload.rateType = rateTypeInput;
       }
       if (offerNotes.trim()) {
         payload.notes = offerNotes.trim();
@@ -257,7 +272,7 @@ export default function ConversationPage() {
         err instanceof Error
           ? err.message || "Failed to create offer. Please try again."
           : "Failed to create offer. Please try again.";
-      alert(msg);
+      setOfferFormError(msg);
     } finally {
       setOfferSubmitting(false);
     }
@@ -581,13 +596,21 @@ export default function ConversationPage() {
                       ? "Counter the current pending offer."
                       : "Create an offer for this listing conversation."}
                   </p>
+                  {offerFormError && (
+                    <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                      {offerFormError}
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="text-[11px] font-medium text-slate-700">
                       Start date &amp; time
                       <input
                         type="datetime-local"
                         value={offerStart}
-                        onChange={(e) => setOfferStart(e.target.value)}
+                        onChange={(e) => {
+                          setOfferStart(e.target.value);
+                          if (offerFormError) setOfferFormError(null);
+                        }}
                         className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
                         required
                       />
@@ -598,9 +621,12 @@ export default function ConversationPage() {
                         type="number"
                         min={1}
                         value={offerDuration}
-                        onChange={(e) => setOfferDuration(e.target.value)}
+                        onChange={(e) => {
+                          setOfferDuration(e.target.value);
+                          if (offerFormError) setOfferFormError(null);
+                        }}
                         placeholder={
-                          durationUnitLabel === "units"
+                          durationUnitLabel === "listing rate units"
                             ? "e.g. 3"
                             : `e.g. 3 ${durationUnitLabel}`
                         }
@@ -612,21 +638,28 @@ export default function ConversationPage() {
                       </p>
                     </label>
                     <label className="text-[11px] font-medium text-slate-700">
-                      Rate amount (optional override)
+                      Custom rate amount
                       <input
                         type="number"
                         min={1}
                         step="0.01"
                         value={offerRateAmount}
-                        onChange={(e) => setOfferRateAmount(e.target.value)}
+                        onChange={(e) => {
+                          setOfferRateAmount(e.target.value);
+                          if (offerFormError) setOfferFormError(null);
+                        }}
                         className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
+                        placeholder="Leave blank unless overriding rate type too"
                       />
                     </label>
                     <label className="text-[11px] font-medium text-slate-700">
-                      Rate type (optional override)
+                      Custom rate type
                       <select
                         value={offerRateType}
-                        onChange={(e) => setOfferRateType(e.target.value)}
+                        onChange={(e) => {
+                          setOfferRateType(e.target.value);
+                          if (offerFormError) setOfferFormError(null);
+                        }}
                         className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
                       >
                         <option value="">Use listing rate type</option>
@@ -636,7 +669,7 @@ export default function ConversationPage() {
                         <option value="monthly">Monthly</option>
                       </select>
                       <p className="mt-1 text-[10px] font-normal text-slate-500">
-                        Rate type controls how duration is interpreted.
+                        Use both custom fields together, or leave both empty to use listing pricing.
                       </p>
                     </label>
                   </div>
@@ -644,7 +677,10 @@ export default function ConversationPage() {
                     Note (optional)
                     <textarea
                       value={offerNotes}
-                      onChange={(e) => setOfferNotes(e.target.value)}
+                      onChange={(e) => {
+                        setOfferNotes(e.target.value);
+                        if (offerFormError) setOfferFormError(null);
+                      }}
                       rows={2}
                       className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/40 focus:border-[var(--brand)]"
                     />

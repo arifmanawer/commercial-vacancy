@@ -1,6 +1,13 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import type { Profile } from "@/types/database";
@@ -92,7 +99,10 @@ type AuthLeaderMsg =
  * During Stripe/3DS flows, multiple tabs can land back on the app and briefly contend
  * for the auth lock. That should not force a logout; instead we retry reads for a bit.
  */
-async function withAuthLockRetry<T>(fn: () => Promise<T>, opts?: { attempts?: number; baseDelayMs?: number }) {
+async function withAuthLockRetry<T>(
+  fn: () => Promise<T>,
+  opts?: { attempts?: number; baseDelayMs?: number },
+) {
   const attempts = Math.max(1, opts?.attempts ?? 8);
   const baseDelayMs = Math.max(50, opts?.baseDelayMs ?? 120);
 
@@ -134,9 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const profileInflightRef = useRef<Map<string, Promise<Profile | null>>>(new Map());
   const profileResultCacheRef = useRef<{ userId: string; profile: Profile | null } | null>(null);
 
-  useEffect(() => {
-    isLeaderRef.current = isLeader;
-  }, [isLeader]);
+  // useEffect(() => {
+  //   isLeaderRef.current = isLeader;
+  // }, [isLeader]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -219,7 +229,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const tabId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random());
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : String(Math.random());
 
     let bc: BroadcastChannel | null = null;
     let claimTs = Date.now();
@@ -238,7 +250,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);
       leaderBeatInterval = window.setInterval(() => {
         try {
-          bc?.postMessage({ type: "leader", tabId, ts: Date.now() } satisfies AuthLeaderMsg);
+          bc?.postMessage({
+            type: "leader",
+            tabId,
+            ts: Date.now(),
+          } satisfies AuthLeaderMsg);
         } catch {
           // ignore
         }
@@ -265,7 +281,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       claimTs = Date.now();
       bestClaim = { ts: claimTs, tabId };
       try {
-        bc?.postMessage({ type: "claim", tabId, ts: claimTs } satisfies AuthLeaderMsg);
+        bc?.postMessage({
+          type: "claim",
+          tabId,
+          ts: claimTs,
+        } satisfies AuthLeaderMsg);
       } catch {
         // ignore
       }
@@ -289,7 +309,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (msg.type === "claim") {
           const other = { ts: msg.ts, tabId: msg.tabId };
           const isBetter =
-            other.ts < bestClaim.ts || (other.ts === bestClaim.ts && other.tabId < bestClaim.tabId);
+            other.ts < bestClaim.ts ||
+            (other.ts === bestClaim.ts && other.tabId < bestClaim.tabId);
           if (isBetter) bestClaim = other;
           return;
         }
@@ -317,7 +338,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const bootAuth = async (mode: "full" | "minimal") => {
       // 3) Guard boot: if hidden, delay full boot to let visible leader go first.
-      if (typeof document !== "undefined" && document.visibilityState !== "visible" && mode === "full") {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible" &&
+        mode === "full"
+      ) {
         await sleep(1500);
       }
 
@@ -327,7 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             withAuthLockRetry(() => supabase.auth.getSession(), {
               attempts: 3,
               baseDelayMs: 200,
-            })
+            }),
           );
           if (cancelled) return;
           setSession(sessionRes.data.session);
@@ -337,10 +362,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const [sessionRes, userRes] = await runAuthOp(() =>
-          withAuthLockRetry(async () => Promise.all([supabase.auth.getSession(), supabase.auth.getUser()]), {
-            attempts: 8,
-            baseDelayMs: 120,
-          })
+          withAuthLockRetry(
+            async () =>
+              Promise.all([
+                supabase.auth.getSession(),
+                supabase.auth.getUser(),
+              ]),
+            {
+              attempts: 8,
+              baseDelayMs: 120,
+            },
+          ),
         );
         if (cancelled) return;
 
@@ -364,7 +396,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isSupabaseAuthLockTimeout(err)) {
           await sleep(2000);
           try {
-            const sessionRes = await runAuthOp(() => supabase.auth.getSession());
+            const sessionRes = await runAuthOp(() =>
+              supabase.auth.getSession(),
+            );
             if (cancelled) return;
             setSession(sessionRes.data.session);
             setUser(sessionRes.data.session?.user ?? null);
@@ -386,7 +420,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // leaders may refresh after 2s if session is stale.
     const onVisibleMaybeRefresh = () => {
       if (cancelled) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
 
       if (visibleRefreshTimer) window.clearTimeout(visibleRefreshTimer);
       visibleRefreshTimer = window.setTimeout(async () => {
@@ -404,7 +442,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isSessionFresh(sessionRef.current, { bufferMs: 60_000 })) return;
         try {
           await runAuthOp(() =>
-            withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 3, baseDelayMs: 300 })
+            withAuthLockRetry(() => supabase.auth.refreshSession(), {
+              attempts: 3,
+              baseDelayMs: 300,
+            }),
           );
           // After refresh, re-read session/user.
           await bootAuth("minimal");
@@ -456,10 +497,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Ensure profile hydration after election settles even when no auth event fires.
+    // Followers keep minimal behavior to avoid multi-tab lock churn.
+    const postElectionHydration = window.setTimeout(() => {
+      if (cancelled || !isLeaderRef.current) return;
+      void bootAuth("full");
+    }, 1200);
+
     return () => {
       cancelled = true;
       window.clearInterval(monitorLeader);
       if (bootTimer) window.clearTimeout(bootTimer);
+      window.clearTimeout(postElectionHydration);
       if (visibleRefreshTimer) window.clearTimeout(visibleRefreshTimer);
       if (reelectTimer) window.clearTimeout(reelectTimer);
       if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);

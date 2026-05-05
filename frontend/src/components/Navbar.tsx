@@ -43,7 +43,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
 }
 
 export default function Navbar() {
-  const { isLandlord, loading } = useAuth();
+  const { user, isLandlord } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const enableUnread = useMemo(() => {
@@ -85,7 +85,7 @@ export default function Navbar() {
             >
               Assistant
             </Link>
-            {!loading && isLandlord && (
+            {user && isLandlord && (
               <>
                 <Link
                   href="/dashboard/landlord"

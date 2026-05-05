@@ -38,7 +38,8 @@ export default function AuthNav() {
   const btnPrimary =
     "px-3 py-1.5 bg-[var(--brand)] text-white hover:bg-[var(--brand-dark)]";
 
-  if (loading) {
+  // Show account as soon as we have a session user; don't wait for bootAuth or profile.
+  if (loading && !user) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-[13px] text-slate-400">Loading...</span>

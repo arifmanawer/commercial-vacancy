@@ -130,6 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLeaderRef = useRef(false);
   const sessionRef = useRef<Session | null>(null);
   const authOpRef = useRef<Promise<unknown>>(Promise.resolve());
+  /** Same-user profile loads from bootAuth + onAuthStateChange share one network round-trip. */
+  const profileInflightRef = useRef<Map<string, Promise<Profile | null>>>(new Map());
+  const profileResultCacheRef = useRef<{ userId: string; profile: Profile | null } | null>(null);
 
   useEffect(() => {
     isLeaderRef.current = isLeader;
@@ -160,36 +163,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null);
       return;
     }
+    profileResultCacheRef.current = null;
     const p = await fetchProfile(user.id);
     setProfile(p);
   }, [user?.id]);
 
   const updateProfileLocally = useCallback((updates: Partial<Profile>) => {
+    profileResultCacheRef.current = null;
     setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
-  const resolveProfile = useCallback(async (userId: string) => {
-    let p = await fetchProfile(userId);
-    if (p) return p;
-
-    // On hard refresh in production, token refresh can lag briefly.
-    // Retry once after forcing a refresh to avoid falling back to default profile UI.
-    try {
-      // Only the elected leader tab should attempt refreshSession to avoid lock contention.
-      if (isLeaderRef.current) {
-        await runAuthOp(() =>
-          withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 5, baseDelayMs: 150 })
-        );
-      } else {
-        // Followers: avoid refreshSession; just wait briefly and retry profile fetch.
-        await sleep(250);
+  const resolveProfile = useCallback(
+    async (userId: string) => {
+      const cached = profileResultCacheRef.current;
+      if (cached && cached.userId === userId) {
+        return cached.profile;
       }
-    } catch (err) {
-      throw err;
-    }
-    p = await fetchProfile(userId);
-    return p;
-  }, [runAuthOp]);
+      const existing = profileInflightRef.current.get(userId);
+      if (existing) return existing;
+
+      const promise = (async () => {
+        try {
+          let p = await fetchProfile(userId);
+          if (p) {
+            profileResultCacheRef.current = { userId, profile: p };
+            return p;
+          }
+
+          // On hard refresh in production, token refresh can lag briefly.
+          try {
+            if (isLeaderRef.current) {
+              await runAuthOp(() =>
+                withAuthLockRetry(() => supabase.auth.refreshSession(), { attempts: 5, baseDelayMs: 150 })
+              );
+            } else {
+              await sleep(250);
+            }
+          } catch (err) {
+            throw err;
+          }
+          p = await fetchProfile(userId);
+          profileResultCacheRef.current = { userId, profile: p };
+          return p;
+        } finally {
+          profileInflightRef.current.delete(userId);
+        }
+      })();
+
+      profileInflightRef.current.set(userId, promise);
+      return promise;
+    },
+    [runAuthOp],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const becomeLeader = () => {
       if (cancelled) return;
+      isLeaderRef.current = true;
       setIsLeader(true);
       // Heartbeat so followers can detect leader disappearance.
       if (leaderBeatInterval) window.clearInterval(leaderBeatInterval);
@@ -221,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const becomeFollower = () => {
       if (cancelled) return;
+      isLeaderRef.current = false;
       setIsLeader(false);
       if (leaderBeatInterval) {
         window.clearInterval(leaderBeatInterval);
@@ -348,7 +375,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (!cancelled) setProfile((prev) => prev);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -388,10 +417,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener("visibilitychange", onVisibleMaybeRefresh);
     window.addEventListener("focus", onVisibleMaybeRefresh);
 
-    // 3) Guard boot sequence based on visibility; leader runs full boot, followers minimal.
+    // Defer boot until after leader election (~200ms) so isLeaderRef matches the winning tab.
+    // Hidden tabs still wait longer so a visible tab can claim the auth lock first.
+    const bootDelayMs =
+      typeof document !== "undefined" && document.visibilityState !== "visible" ? 1500 : 250;
     bootTimer = window.setTimeout(() => {
       bootAuth(isLeaderRef.current ? "full" : "minimal");
-    }, typeof document !== "undefined" && document.visibilityState !== "visible" ? 1500 : 0);
+    }, bootDelayMs);
 
     // Fallback: never leave loading true for more than 3s (e.g. if getSession hangs)
     const timeoutId = setTimeout(() => {
@@ -404,6 +436,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setSession(s);
         setUser(s?.user ?? null);
+        // Session is known (signed in or out) — unblock navbar before profile/network completes.
+        setLoading(false);
         if (s?.user?.id) {
           const p = await resolveProfile(s.user.id);
           setProfile((prev) => p ?? prev);
@@ -417,6 +451,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(null);
           setUser(null);
           setProfile(null);
+          setLoading(false);
         }
       }
     });
@@ -437,20 +472,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [resolveProfile, runAuthOp]);
 
   const signOut = async () => {
+    const SIGN_OUT_WAIT_MS = 10_000;
     try {
-      await supabase.auth.signOut({ scope: "global" });
-    } catch (err) {
-      if (isSupabaseAuthLockTimeout(err)) {
-        // If another tab holds the lock, let this be a no-op and rely on cross-tab signout.
-        return;
-      } else {
-        throw err;
-      }
+      await Promise.race([
+        supabase.auth.signOut({ scope: "global" }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error("signOut timed out")), SIGN_OUT_WAIT_MS);
+        }),
+      ]);
+    } catch {
+      // Clear storage in finally (lock timeout, network, etc.)
     } finally {
-      // Always clear local state — onAuthStateChange can lag or miss a tick with cookie/session sync
+      clearSupabaseAuthCookiesAndStorage();
+      profileResultCacheRef.current = null;
+      profileInflightRef.current.clear();
       setSession(null);
       setUser(null);
       setProfile(null);
+      setLoading(false);
     }
   };
 

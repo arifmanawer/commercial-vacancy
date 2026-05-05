@@ -80,11 +80,8 @@ function logBookingsApi(
   console.log(msg, { timestamp: new Date().toISOString() });
 }
 
-function getUserId(req: Request): string | null {
-  const headerId = req.headers['x-user-id'];
-  const queryId = req.query.user_id;
-  const id = (headerId as string) || (queryId as string) || '';
-  return id || null;
+function getUserId(req: Request): string {
+  return req.user!.id;
 }
 
 function computeDurationUnits(start: Date, end: Date, rateType: string): number | null {
@@ -163,14 +160,6 @@ router.post<
   '/buy-now',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = getUserId(req);
-    if (!userId) {
-      logBookingsApi('POST', '/api/bookings/buy-now', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const { listingId, startDate, endDate, platformFeePercent } = req.body;
     if (!listingId || !startDate || !endDate) {
@@ -665,14 +654,6 @@ router.post<
   '/confirm-checkout',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = getUserId(req);
-    if (!userId) {
-      logBookingsApi('POST', '/api/bookings/confirm-checkout', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const sessionId = req.body?.sessionId?.trim();
     const bookingIdHint = req.body?.bookingId?.trim() || null;
@@ -808,15 +789,6 @@ router.get<
     const userId = getUserId(req);
     const { id } = req.params;
 
-    if (!userId) {
-      logBookingsApi('GET', '/api/bookings/:id', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
-
     const { data: booking, error } = await supabaseAdmin
       .from('bookings')
       .select(
@@ -862,15 +834,6 @@ router.post<
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-
-    if (!userId) {
-      logBookingsApi('POST', '/api/bookings/:id/cancel', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const {
       data: booking,

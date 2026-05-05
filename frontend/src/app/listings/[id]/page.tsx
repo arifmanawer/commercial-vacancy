@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { supabase, supabasePublic } from "@/lib/supabaseClient";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { GoogleMap, Marker } from "@react-google-maps/api";
 import { SaveListingButton } from "@/components/SaveListingButton";
 import { useGoogleMapsLoader } from "@/hooks/useGoogleMapsLoader";
@@ -312,11 +312,12 @@ export default function ListingPage() {
     async function pollBooking(requestUserId: string) {
       attempts += 1;
       try {
+        const authHeaders = await getAuthHeaders();
         const res = await fetch(
-          `${getApiUrl()}/api/bookings/${bookingId}?${apiUserQuery(requestUserId)}`,
+          `${getApiUrl()}/api/bookings/${bookingId}`,
           {
             headers: {
-              "X-User-Id": requestUserId,
+              ...authHeaders,
             },
           },
         );
@@ -354,17 +355,14 @@ export default function ListingPage() {
     setFeedback("Payment received — confirming your reservation…");
     // Ask the backend to confirm the Checkout Session (fallback when webhooks can't reach local dev).
     if (sessionId) {
-      fetch(
-        `${getApiUrl()}/api/bookings/confirm-checkout?${apiUserQuery(userId)}`,
-        {
+      (async () => {
+        const authHeaders = await getAuthHeaders();
+        await fetch(`${getApiUrl()}/api/bookings/confirm-checkout`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-User-Id": userId,
-          },
+          headers: { ...authHeaders },
           body: JSON.stringify({ sessionId, bookingId }),
-        },
-      ).catch(() => null);
+        });
+      })().catch(() => null);
     }
 
     pollBooking(userId);
@@ -563,12 +561,11 @@ export default function ListingPage() {
 
     try {
       const res = await fetch(
-        `${getApiUrl()}/api/bookings/buy-now?${apiUserQuery(user.id)}`,
+        `${getApiUrl()}/api/bookings/buy-now`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "X-User-Id": user.id,
+            ...(await getAuthHeaders()),
           },
           body: JSON.stringify({
             listingId: listing.id,
@@ -657,12 +654,11 @@ export default function ListingPage() {
       setError(null);
       setStartingConversation(true);
       const res = await fetch(
-        `${getApiUrl()}/api/messages/conversations?${apiUserQuery(user.id)}`,
+        `${getApiUrl()}/api/messages/conversations`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "X-User-Id": user.id,
+            ...(await getAuthHeaders()),
           },
           body: JSON.stringify({
             contextType: "listing",

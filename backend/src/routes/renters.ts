@@ -4,13 +4,6 @@ import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 
-function getUserId(req: Request): string | null {
-  const headerId = req.headers["x-user-id"];
-  const queryId = req.query.user_id;
-  const id = (headerId as string) || (queryId as string) || "";
-  return id || null;
-}
-
 /**
  * GET /api/renters/dashboard
  * Consolidated renter dashboard payload. Uses admin client to avoid browser auth lock/RLS issues.
@@ -18,13 +11,7 @@ function getUserId(req: Request): string | null {
 router.get(
   "/dashboard",
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = getUserId(req);
-    if (!userId) {
-      res
-        .status(400)
-        .json({ success: false, error: "Missing user_id (X-User-Id header or user_id query param)" });
-      return;
-    }
+    const userId = req.user!.id;
 
     // 1) Saved listings -> listing details + images
     const { data: savedRows, error: savedErr } = await supabaseAdmin
@@ -142,13 +129,7 @@ router.get(
 router.get(
   "/reservations",
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = getUserId(req);
-    if (!userId) {
-      res
-        .status(400)
-        .json({ success: false, error: "Missing user_id (X-User-Id header or user_id query param)" });
-      return;
-    }
+    const userId = req.user!.id;
 
     const { data: bookingRows, error: bookingErr } = await supabaseAdmin
       .from("bookings")

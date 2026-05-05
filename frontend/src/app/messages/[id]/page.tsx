@@ -7,7 +7,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { OfferModel, useConversation } from "@/hooks/useConversation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { debugFetch } from "@/lib/debugFetch";
 import { useToast } from "@/components/Toast";
 
@@ -104,12 +104,11 @@ export default function ConversationPage() {
     if (!id || !user) return;
     setOfferHistoryLoading(true);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await debugFetch(
-        withApiUserId(`${getApiUrl()}/api/offers/conversation/${id}`, user.id),
+        `${getApiUrl()}/api/offers/conversation/${id}`,
         {
-          headers: {
-            "X-User-Id": user.id,
-          },
+          headers: { ...authHeaders },
         },
         { label: "offers.history", userId: user.id },
       );
@@ -151,14 +150,12 @@ export default function ConversationPage() {
       setMessages((prev) => [...prev, optimistic]);
       setBody("");
 
+      const authHeaders = await getAuthHeaders();
       const res = await debugFetch(
-        withApiUserId(`${getApiUrl()}/api/messages/conversations/${id}/messages`, user.id),
+        `${getApiUrl()}/api/messages/conversations/${id}/messages`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-User-Id": user.id,
-          },
+          headers: { ...authHeaders },
           body: JSON.stringify({ body: trimmed }),
         },
         { label: "messages.send", userId: user.id },
@@ -226,8 +223,8 @@ export default function ConversationPage() {
     try {
       const endpoint =
         offerMode === "counter" && latestOffer?.id
-          ? withApiUserId(`${getApiUrl()}/api/offers/${latestOffer.id}/counter`, user.id)
-          : withApiUserId(`${getApiUrl()}/api/offers`, user.id);
+          ? `${getApiUrl()}/api/offers/${latestOffer.id}/counter`
+          : `${getApiUrl()}/api/offers`;
       const payload: Record<string, unknown> = {
         startDate: offerStart,
         duration,
@@ -247,14 +244,16 @@ export default function ConversationPage() {
         }
       }
 
-      const res = await debugFetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Id": user.id,
+      const authHeaders = await getAuthHeaders();
+      const res = await debugFetch(
+        endpoint,
+        {
+          method: "POST",
+          headers: { ...authHeaders },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      }, { label: "offers.createOrCounter", userId: user.id });
+        { label: "offers.createOrCounter", userId: user.id },
+      );
 
       const json = (await res.json().catch(() => null)) as
         | { success?: boolean; data?: any; error?: string }
@@ -288,13 +287,12 @@ export default function ConversationPage() {
     if (!user || !latestOffer?.id) return;
     setOfferActionLoading(action);
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await debugFetch(
-        withApiUserId(`${getApiUrl()}/api/offers/${latestOffer.id}/${action}`, user.id),
+        `${getApiUrl()}/api/offers/${latestOffer.id}/${action}`,
         {
           method: "POST",
-          headers: {
-            "X-User-Id": user.id,
-          },
+          headers: { ...authHeaders },
         },
         { label: "offers.action", userId: user.id },
       );

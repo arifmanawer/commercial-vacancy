@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getApiUrl, withApiUserId } from "@/lib/api";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { debugFetch } from "@/lib/debugFetch";
 
@@ -58,13 +58,12 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const authHeaders = await getAuthHeaders();
       const res = await debugFetch(
-        withApiUserId(`${getApiUrl()}/api/messages/conversations`, user.id),
+        `${getApiUrl()}/api/messages/conversations`,
         {
-        headers: {
-          "X-User-Id": user.id,
-        },
-        signal: controller.signal,
+          headers: { ...authHeaders },
+          signal: controller.signal,
         },
         { label: "messages.conversations.list", userId: user.id },
       );
@@ -120,19 +119,17 @@ export function useConversations(options?: { enabled?: boolean; focusDebounceMs?
 
     const results = await Promise.allSettled(
       unreadConversationIds.map((conversationId) =>
-        debugFetch(
-          withApiUserId(
+        (async () => {
+          const authHeaders = await getAuthHeaders();
+          return debugFetch(
             `${getApiUrl()}/api/messages/conversations/${conversationId}/read`,
-            user.id,
-          ),
-          {
-            method: "POST",
-            headers: {
-              "X-User-Id": user.id,
+            {
+              method: "POST",
+              headers: { ...authHeaders },
             },
-          },
-          { label: "messages.conversations.read", userId: user.id },
-        ),
+            { label: "messages.conversations.read", userId: user.id },
+          );
+        })(),
       )
     );
 

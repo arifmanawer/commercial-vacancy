@@ -1,3 +1,5 @@
+import { supabase } from "./supabaseClient";
+
 export function getApiUrl() {
   const url = process.env.NEXT_PUBLIC_API_URL?.trim();
   // If unset, fall back to relative requests (e.g. `/api/...`) so
@@ -27,5 +29,18 @@ export function withApiUserId(url: string, userId: string | null | undefined) {
     const join = url.includes("?") ? "&" : "?";
     return `${url}${join}user_id=${encodeURIComponent(userId)}`;
   }
+}
+
+export async function getAuthHeaders(): Promise<HeadersInit> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) return {};
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+    "Content-Type": "application/json",
+  };
 }
 

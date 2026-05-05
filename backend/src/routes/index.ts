@@ -12,21 +12,22 @@ import offerRoutes from './offers';
 import bookingRoutes from './bookings';
 import devRoutes from './dev';
 import renterRoutes from './renters';
+import { requireAuth } from '../middleware/requireAuth';
 
 const router = Router();
 
-router.use('/users', userRoutes);
+router.use('/users', requireAuth, userRoutes);
 router.use('/auth-events', authEventsRoutes);
 router.use('/contractors', contractorRoutes);
 router.use('/profiles', profileRoutes);
 router.use('/listings', listingRoutes);
-router.use('/messages', messageRoutes);
-router.use('/assistant', assistantRoutes);
-router.use('/contractor-jobs', contractorJobsRoutes);
-router.use('/stripe', stripeConnectRoutes);
-router.use('/offers', offerRoutes);
-router.use('/bookings', bookingRoutes);
-router.use('/renters', renterRoutes);
+router.use('/messages', requireAuth, messageRoutes);
+router.use('/assistant', requireAuth, assistantRoutes);
+router.use('/contractor-jobs', requireAuth, contractorJobsRoutes);
+router.use('/stripe', requireAuth, stripeConnectRoutes);
+router.use('/offers', requireAuth, offerRoutes);
+router.use('/bookings', requireAuth, bookingRoutes);
+router.use('/renters', requireAuth, renterRoutes);
 
 // Dev-only testing routes (hidden in production)
 router.use('/dev', devRoutes);

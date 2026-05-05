@@ -98,11 +98,8 @@ function logMessagesApi(
   console.log(msg, { timestamp: new Date().toISOString() });
 }
 
-function getUserId(req: Request): string | null {
-  const headerId = req.headers['x-user-id'];
-  const queryId = req.query.user_id;
-  const id = (headerId as string) || (queryId as string) || '';
-  return id || null;
+function getUserId(req: Request): string {
+  return req.user!.id;
 }
 
 async function fetchListingMap(listingIds: string[]): Promise<Map<string, ListingBasic>> {
@@ -166,15 +163,6 @@ router.get<
   '/conversations',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = getUserId(req);
-
-    if (!userId) {
-      logMessagesApi('GET', '/api/messages/conversations', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const { data: participantRows, error: participantsError } = await supabaseAdmin
       .from('conversation_participants')
@@ -325,15 +313,6 @@ router.post<
   '/conversations',
   asyncHandler(async (req: Request, res: Response) => {
     const userId = getUserId(req);
-
-    if (!userId) {
-      logMessagesApi('POST', '/api/messages/conversations', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const { contextType, listingId, contractorId, participantIds } = req.body;
 
@@ -587,15 +566,6 @@ router.get<
     const userId = getUserId(req);
     const { id } = req.params;
 
-    if (!userId) {
-      logMessagesApi('GET', '/api/messages/conversations/:id', undefined, false, 'Missing user_id');
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
-
     const { data: participantRow, error: participantError } = await supabaseAdmin
       .from('conversation_participants')
       .select('conversation_id, user_id, last_read_at, role')
@@ -806,21 +776,6 @@ router.post<
     const { id } = req.params;
     const { body } = req.body;
 
-    if (!userId) {
-      logMessagesApi(
-        'POST',
-        '/api/messages/conversations/:id/messages',
-        undefined,
-        false,
-        'Missing user_id'
-      );
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
-
     if (!body || !body.trim()) {
       res.status(400).json({ success: false, error: 'Message body is required' });
       return;
@@ -946,21 +901,6 @@ router.post<
   asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
     const userId = getUserId(req);
     const { id } = req.params;
-
-    if (!userId) {
-      logMessagesApi(
-        'POST',
-        '/api/messages/conversations/:id/read',
-        undefined,
-        false,
-        'Missing user_id'
-      );
-      res.status(400).json({
-        success: false,
-        error: 'Missing user_id (X-User-Id header or user_id query param)',
-      });
-      return;
-    }
 
     const { data: participantRow, error: participantError } = await supabaseAdmin
       .from('conversation_participants')

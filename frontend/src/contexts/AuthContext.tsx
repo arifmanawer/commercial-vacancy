@@ -12,7 +12,13 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { authDebug } from "@/lib/authDebug";
 import type { Profile } from "@/types/database";
-import { clearCachedToken, setCachedToken } from "@/lib/api";
+import {
+  clearCachedToken,
+  getApiUrl,
+  getAuthHeaders,
+  setCachedToken,
+  withApiUserId,
+} from "@/lib/api";
 
 type AuthState = {
   user: User | null;
@@ -64,21 +70,37 @@ function clearSupabaseAuthCookiesAndStorage() {
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   authDebug.info("profile.fetch.start", { userId });
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  if (error || !data) {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(
+      withApiUserId(`${getApiUrl()}/api/profiles/me`, userId),
+      {
+        headers: {
+          ...authHeaders,
+          "X-User-Id": userId,
+        },
+      },
+    );
+    if (!res.ok) {
+      authDebug.warn("profile.fetch.miss", {
+        userId,
+        status: res.status,
+        hasData: false,
+      });
+      return null;
+    }
+    const json = await res.json();
+    const profile = json?.data ?? json;
+    authDebug.info("profile.fetch.ok", { userId });
+    return profile as Profile;
+  } catch (err) {
     authDebug.warn("profile.fetch.miss", {
       userId,
-      error: error?.message ?? null,
-      hasData: Boolean(data),
+      error: err instanceof Error ? err.message : String(err),
+      hasData: false,
     });
     return null;
   }
-  authDebug.info("profile.fetch.ok", { userId });
-  return data as Profile;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -149,16 +171,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             attempt,
             message: err instanceof Error ? err.message : String(err),
           });
-          // A common reason for a first-load miss is an expired access token that
-          // gets refreshed shortly after startup. Try a refresh once per attempt.
-          try {
-            authDebug.info("session.refresh.start", { userId, attempt });
-            await supabase.auth.refreshSession();
-            authDebug.info("session.refresh.ok", { userId, attempt });
-          } catch {
-            authDebug.warn("session.refresh.error", { userId, attempt });
-            // ignore refresh errors; we'll still retry resolveProfile
-          }
           if (attempt < retries) {
             await new Promise((r) => window.setTimeout(r, delayMs * (attempt + 1)));
           }

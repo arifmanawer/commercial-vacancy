@@ -12,6 +12,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { authDebug } from "@/lib/authDebug";
 import type { Profile } from "@/types/database";
+import { clearCachedToken, setCachedToken } from "@/lib/api";
 
 type AuthState = {
   user: User | null;
@@ -234,6 +235,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userId: s?.user?.id ?? null,
         });
         setSession(s);
+        if (event === "SIGNED_OUT") {
+          clearCachedToken();
+        } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          const token = s?.access_token ?? null;
+          const expiresAt = s?.expires_at ?? 0;
+          if (token && expiresAt) setCachedToken(token, expiresAt);
+        }
         setUser(s?.user ?? null);
         if (s?.user?.id) {
           const p = await loadProfileWithRetry(s.user.id);

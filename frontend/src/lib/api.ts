@@ -1,5 +1,9 @@
 import { supabase } from "./supabaseClient";
 
+let cachedToken: string | null = null;
+let cachedExpiry: number = 0;
+let inflightSessionPromise: ReturnType<typeof supabase.auth.getSession> | null = null;
+
 export function getApiUrl() {
   const url = process.env.NEXT_PUBLIC_API_URL?.trim();
   // If unset, fall back to relative requests (e.g. `/api/...`) so
@@ -31,12 +35,41 @@ export function withApiUserId(url: string, userId: string | null | undefined) {
   }
 }
 
+export function setCachedToken(token: string | null, expiresAt: number) {
+  cachedToken = token;
+  cachedExpiry = expiresAt * 1000; // Supabase `expires_at` is seconds
+}
+
+export function clearCachedToken() {
+  cachedToken = null;
+  cachedExpiry = 0;
+}
+
 export async function getAuthHeaders(): Promise<HeadersInit> {
+  // Use cached token when it is valid beyond the 60s buffer.
+  if (cachedToken && cachedExpiry > Date.now() + 60_000) {
+    return {
+      Authorization: `Bearer ${cachedToken}`,
+      "Content-Type": "application/json",
+    };
+  }
+
+  // Cache miss: dedupe parallel calls to avoid Supabase auth Web Lock contention.
+  if (!inflightSessionPromise) {
+    inflightSessionPromise = supabase.auth.getSession();
+  }
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await inflightSessionPromise.finally(() => {
+    inflightSessionPromise = null;
+  });
 
-  if (!session?.access_token) return {};
+  if (!session?.access_token || !session.expires_at) {
+    clearCachedToken();
+    return {};
+  }
+
+  setCachedToken(session.access_token, session.expires_at);
 
   return {
     Authorization: `Bearer ${session.access_token}`,

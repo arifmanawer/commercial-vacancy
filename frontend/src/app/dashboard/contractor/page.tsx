@@ -303,6 +303,12 @@ export default function ContractorDashboardPage() {
   };
 
   const dayOrder: string[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const requestedJobs = jobs.filter(
+    (job) => job.status === "requested" || job.status === "declined",
+  );
+  const acceptedAndCompletedJobs = jobs.filter(
+    (job) => job.status === "accepted" || job.status === "completed",
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -542,94 +548,171 @@ export default function ContractorDashboardPage() {
           ) : null}
 
           {jobs.length > 0 && (
-            <ul className="divide-y divide-slate-100">
-              {jobs.map((job) => (
-                <li key={job.id} className="py-3 flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium text-slate-900">
-                        {job.title}
-                      </span>
-                      {job.description && (
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {job.description}
-                        </p>
-                      )}
-                      <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                        {job.budget != null && (
-                          <span>Budget: ${job.budget.toFixed(0)}</span>
-                        )}
-                        {job.preferred_date && (
-                          <span>
-                            Preferred:{" "}
-                            {new Date(job.preferred_date).toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses(
-                        job.status,
-                      )}`}
-                    >
-                      {statusLabel(job.status)}
-                    </span>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Requested jobs
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  New requests that still need your decision.
+                </p>
+                {requestedJobs.length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-xs text-slate-500">
+                    No requested jobs right now.
                   </div>
-                  {job.landlord_note && (
-                    <p className="text-xs text-slate-600">
-                      Landlord note: “{job.landlord_note}”
-                    </p>
-                  )}
-                  {job.contractor_note && (
-                    <p className="text-xs text-slate-600">
-                      Your note: “{job.contractor_note}”
-                    </p>
-                  )}
-                  {job.status === "requested" && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={updatingJobId === job.id}
-                        onClick={() =>
-                          updateJobStatus(job.id, { status: "accepted" })
-                        }
-                        className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-                      >
-                        {updatingJobId === job.id
-                          ? "Updating..."
-                          : "Accept job"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingJobId === job.id}
-                        onClick={() =>
-                          updateJobStatus(job.id, { status: "declined" })
-                        }
-                        className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100 disabled:opacity-60"
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  )}
-                  {job.status === "accepted" && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={updatingJobId === job.id}
-                        onClick={() =>
-                          updateJobStatus(job.id, { status: "completed" })
-                        }
-                        className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-                      >
-                        {updatingJobId === job.id
-                          ? "Updating..."
-                          : "Mark completed"}
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+                ) : (
+                  <ul className="mt-3 divide-y divide-slate-200">
+                    {requestedJobs.map((job) => (
+                      <li key={job.id} className="py-3 flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-slate-900">
+                              {job.title}
+                            </span>
+                            {job.description && (
+                              <p className="text-xs text-slate-600 line-clamp-2">
+                                {job.description}
+                              </p>
+                            )}
+                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                              {job.budget != null && (
+                                <span>Budget: ${job.budget.toFixed(0)}</span>
+                              )}
+                              {job.preferred_date && (
+                                <span>
+                                  Preferred:{" "}
+                                  {new Date(job.preferred_date).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses(
+                              job.status,
+                            )}`}
+                          >
+                            {statusLabel(job.status)}
+                          </span>
+                        </div>
+                        {job.landlord_note && (
+                          <p className="text-xs text-slate-600">
+                            Landlord note: “{job.landlord_note}”
+                          </p>
+                        )}
+                        {job.contractor_note && (
+                          <p className="text-xs text-slate-600">
+                            Your note: “{job.contractor_note}”
+                          </p>
+                        )}
+                        {job.status === "requested" && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={updatingJobId === job.id}
+                              onClick={() =>
+                                updateJobStatus(job.id, { status: "accepted" })
+                              }
+                              className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                              {updatingJobId === job.id
+                                ? "Updating..."
+                                : "Accept job"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={updatingJobId === job.id}
+                              onClick={() =>
+                                updateJobStatus(job.id, { status: "declined" })
+                              }
+                              className="inline-flex items-center rounded-md bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 border border-red-100 hover:bg-red-100 disabled:opacity-60"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Accepted &amp; completed
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Jobs you accepted and work you already completed.
+                </p>
+                {acceptedAndCompletedJobs.length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-xs text-slate-500">
+                    No accepted or completed jobs yet.
+                  </div>
+                ) : (
+                  <ul className="mt-3 divide-y divide-slate-200">
+                    {acceptedAndCompletedJobs.map((job) => (
+                      <li key={job.id} className="py-3 flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-slate-900">
+                              {job.title}
+                            </span>
+                            {job.description && (
+                              <p className="text-xs text-slate-600 line-clamp-2">
+                                {job.description}
+                              </p>
+                            )}
+                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                              {job.budget != null && (
+                                <span>Budget: ${job.budget.toFixed(0)}</span>
+                              )}
+                              {job.preferred_date && (
+                                <span>
+                                  Preferred:{" "}
+                                  {new Date(job.preferred_date).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses(
+                              job.status,
+                            )}`}
+                          >
+                            {statusLabel(job.status)}
+                          </span>
+                        </div>
+                        {job.landlord_note && (
+                          <p className="text-xs text-slate-600">
+                            Landlord note: “{job.landlord_note}”
+                          </p>
+                        )}
+                        {job.contractor_note && (
+                          <p className="text-xs text-slate-600">
+                            Your note: “{job.contractor_note}”
+                          </p>
+                        )}
+                        {job.status === "accepted" && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={updatingJobId === job.id}
+                              onClick={() =>
+                                updateJobStatus(job.id, { status: "completed" })
+                              }
+                              className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                            >
+                              {updatingJobId === job.id
+                                ? "Updating..."
+                                : "Mark completed"}
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           )}
         </section>
       </main>

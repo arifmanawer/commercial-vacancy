@@ -101,6 +101,81 @@ function combineLocalDateAndTime(d: Date, timeHHMM: string) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
 }
 
+function getBillingAlignmentWarning(
+  start: Date,
+  end: Date,
+  rateType: ListingDetails["rate_type"],
+) {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+
+  const diffMs = endMs - startMs;
+  const hourMs = 60 * 60 * 1000;
+  const dayMs = 24 * hourMs;
+  const weekMs = 7 * dayMs;
+  const isIntegerWithinTolerance = (value: number, tolerance = 1e-9) =>
+    Math.abs(value - Math.round(value)) <= tolerance;
+
+  if (rateType === "hourly" && !isIntegerWithinTolerance(diffMs / hourMs)) {
+    return "This range is not a full hourly block. Billing rounds up to the next full hour.";
+  }
+
+  if (rateType === "daily" && !isIntegerWithinTolerance(diffMs / dayMs)) {
+    return "This range is not a full daily block. Billing rounds up to the next full day.";
+  }
+
+  if (rateType === "weekly" && !isIntegerWithinTolerance(diffMs / weekMs)) {
+    return "This range is not a full weekly block. Billing rounds up to the next full week.";
+  }
+
+  if (rateType === "monthly") {
+    const monthsBase =
+      (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      (end.getUTCMonth() - start.getUTCMonth());
+    const anchor = new Date(start.getTime());
+    anchor.setUTCMonth(anchor.getUTCMonth() + monthsBase);
+    if (monthsBase < 1 || anchor.getTime() !== endMs) {
+      return "This range is not a full monthly block. Billing rounds up to the next full month.";
+    }
+  }
+
+  return null;
+}
+
+function getCalendarRangeAlignmentWarning(
+  from: Date,
+  to: Date,
+  rateType: ListingDetails["rate_type"],
+) {
+  const start = startOfDay(from);
+  const end = startOfDay(to);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return null;
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const selectedDays = Math.floor((endMs - startMs) / dayMs) + 1;
+
+  if (rateType === "weekly" && selectedDays % 7 !== 0) {
+    return "This range is not a full weekly block. Billing rounds up to the next full week.";
+  }
+
+  if (rateType === "monthly") {
+    const endExclusive = addDays(end, 1);
+    const monthsBase =
+      (endExclusive.getFullYear() - start.getFullYear()) * 12 +
+      (endExclusive.getMonth() - start.getMonth());
+    const anchor = new Date(start.getTime());
+    anchor.setMonth(anchor.getMonth() + monthsBase);
+    if (monthsBase < 1 || anchor.getTime() !== endExclusive.getTime()) {
+      return "This range is not a full monthly block. Billing rounds up to the next full month.";
+    }
+  }
+
+  return null;
+}
+
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -136,11 +211,32 @@ export default function ListingPage() {
   const [mapError, setMapError] = useState<string | null>(null);
   const buyNowCardRef = React.useRef<HTMLDivElement | null>(null);
 
+  const effectiveBookingWindow = React.useMemo(() => {
+    if (!listing?.rate_type) return null;
+
+    // Match checkout behavior for non-hourly billing: date range drives charge units.
+    if (listing.rate_type !== "hourly") {
+      if (!buyRange?.from || !buyRange?.to) return null;
+      return {
+        start: startOfDay(buyRange.from),
+        end: startOfDay(buyRange.to),
+      };
+    }
+
+    if (!buyStart || !buyEnd) return null;
+    return {
+      start: new Date(buyStart),
+      end: new Date(buyEnd),
+    };
+  }, [buyEnd, buyRange?.from, buyRange?.to, buyStart, listing?.rate_type]);
+
   const buyNowAvailability = React.useMemo(() => {
-    if (!listing || !listing.rate_type || !buyStart || !buyEnd) return null;
-    const start = new Date(buyStart);
-    const end = new Date(buyEnd);
-    const durationUnits = computeDurationUnits(start, end, listing.rate_type);
+    if (!listing || !listing.rate_type || !effectiveBookingWindow) return null;
+    const durationUnits = computeDurationUnits(
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
+      listing.rate_type,
+    );
     if (!durationUnits) {
       return {
         status: "invalid" as const,
@@ -163,15 +259,19 @@ export default function ListingPage() {
       status: "ok" as const,
       message: "Listing appears available for these dates.",
     };
-  }, [listing, buyStart, buyEnd]);
+  }, [effectiveBookingWindow, listing]);
 
   const buyNowPricingEstimate = React.useMemo(() => {
-    if (!listing?.rate_type || listing.rate_amount == null || !buyStart || !buyEnd) {
+    if (
+      !listing?.rate_type ||
+      listing.rate_amount == null ||
+      !effectiveBookingWindow
+    ) {
       return null;
     }
     const durationUnits = computeDurationUnits(
-      new Date(buyStart),
-      new Date(buyEnd),
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
       listing.rate_type,
     );
     if (!durationUnits) return null;
@@ -186,7 +286,28 @@ export default function ListingPage() {
       platformFee,
       total,
     };
-  }, [buyEnd, buyStart, listing?.rate_amount, listing?.rate_type]);
+  }, [effectiveBookingWindow, listing?.rate_amount, listing?.rate_type]);
+
+  const billingAlignmentWarning = React.useMemo(() => {
+    if (!listing?.rate_type) return null;
+    if (
+      listing.rate_type !== "hourly" &&
+      buyRange?.from &&
+      buyRange?.to
+    ) {
+      return getCalendarRangeAlignmentWarning(
+        buyRange.from,
+        buyRange.to,
+        listing.rate_type,
+      );
+    }
+    if (!effectiveBookingWindow) return null;
+    return getBillingAlignmentWarning(
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
+      listing.rate_type,
+    );
+  }, [buyRange?.from, buyRange?.to, effectiveBookingWindow, listing?.rate_type]);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
@@ -1001,10 +1122,10 @@ export default function ListingPage() {
                           />
                         </label>
                       </div>
-                      {listing.rate_type && buyStart && buyEnd && (() => {
+                      {listing.rate_type && effectiveBookingWindow && (() => {
                         const durationUnits = computeDurationUnits(
-                          new Date(buyStart),
-                          new Date(buyEnd),
+                          effectiveBookingWindow.start,
+                          effectiveBookingWindow.end,
                           listing.rate_type,
                         );
                         if (!durationUnits) return null;
@@ -1024,6 +1145,11 @@ export default function ListingPage() {
                           }`}
                         >
                           {buyNowAvailability.message}
+                        </p>
+                      )}
+                      {billingAlignmentWarning && (
+                        <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                          {billingAlignmentWarning}
                         </p>
                       )}
                       {buyNowPricingEstimate && (
@@ -1056,6 +1182,10 @@ export default function ListingPage() {
                           </p>
                         </div>
                       )}
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Need different terms? You can message the landlord to negotiate
+                        pricing and duration ranges before checkout.
+                      </p>
                     </div>
                     <button
                       className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"

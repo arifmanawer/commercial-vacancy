@@ -53,6 +53,8 @@ function formatMoney(value: number | null) {
   }).format(value);
 }
 
+const PLATFORM_FEE_PERCENT = 10;
+
 /** Backend accepts `user_id` query param as fallback when `X-User-Id` is stripped (some proxies/CDNs). */
 function apiUserQuery(userId: string) {
   return `user_id=${encodeURIComponent(userId)}`;
@@ -162,6 +164,29 @@ export default function ListingPage() {
       message: "Listing appears available for these dates.",
     };
   }, [listing, buyStart, buyEnd]);
+
+  const buyNowPricingEstimate = React.useMemo(() => {
+    if (!listing?.rate_type || listing.rate_amount == null || !buyStart || !buyEnd) {
+      return null;
+    }
+    const durationUnits = computeDurationUnits(
+      new Date(buyStart),
+      new Date(buyEnd),
+      listing.rate_type,
+    );
+    if (!durationUnits) return null;
+
+    const subtotal = listing.rate_amount * durationUnits;
+    const platformFee = subtotal * (PLATFORM_FEE_PERCENT / 100);
+    const total = subtotal + platformFee;
+
+    return {
+      durationUnits,
+      subtotal,
+      platformFee,
+      total,
+    };
+  }, [buyEnd, buyStart, listing?.rate_amount, listing?.rate_type]);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
@@ -1000,6 +1025,36 @@ export default function ListingPage() {
                         >
                           {buyNowAvailability.message}
                         </p>
+                      )}
+                      {buyNowPricingEstimate && (
+                        <div className="mt-2 rounded-md border border-slate-200 bg-white p-2.5 text-[11px] text-slate-700 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span>
+                              Base price (
+                              {buyNowPricingEstimate.durationUnits} {listing.rate_type}
+                              {" "}x {formatMoney(listing.rate_amount)})
+                            </span>
+                            <span className="font-medium">
+                              {formatMoney(buyNowPricingEstimate.subtotal)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Platform fee ({PLATFORM_FEE_PERCENT}%)</span>
+                            <span className="font-medium">
+                              {formatMoney(buyNowPricingEstimate.platformFee)}
+                            </span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-1 flex items-center justify-between text-slate-900">
+                            <span className="font-semibold">Estimated total due now</span>
+                            <span className="font-semibold">
+                              {formatMoney(buyNowPricingEstimate.total)}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed">
+                            Transparency note: This is an estimate based on listed rates.
+                            Final charges may vary at checkout based on taxes or other applicable fees.
+                          </p>
+                        </div>
                       )}
                     </div>
                     <button

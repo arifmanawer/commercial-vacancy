@@ -53,6 +53,8 @@ function formatMoney(value: number | null) {
   }).format(value);
 }
 
+const PLATFORM_FEE_PERCENT = 10;
+
 /** Backend accepts `user_id` query param as fallback when `X-User-Id` is stripped (some proxies/CDNs). */
 function apiUserQuery(userId: string) {
   return `user_id=${encodeURIComponent(userId)}`;
@@ -99,6 +101,81 @@ function combineLocalDateAndTime(d: Date, timeHHMM: string) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
 }
 
+function getBillingAlignmentWarning(
+  start: Date,
+  end: Date,
+  rateType: ListingDetails["rate_type"],
+) {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+
+  const diffMs = endMs - startMs;
+  const hourMs = 60 * 60 * 1000;
+  const dayMs = 24 * hourMs;
+  const weekMs = 7 * dayMs;
+  const isIntegerWithinTolerance = (value: number, tolerance = 1e-9) =>
+    Math.abs(value - Math.round(value)) <= tolerance;
+
+  if (rateType === "hourly" && !isIntegerWithinTolerance(diffMs / hourMs)) {
+    return "This range is not a full hourly block. Billing rounds up to the next full hour.";
+  }
+
+  if (rateType === "daily" && !isIntegerWithinTolerance(diffMs / dayMs)) {
+    return "This range is not a full daily block. Billing rounds up to the next full day.";
+  }
+
+  if (rateType === "weekly" && !isIntegerWithinTolerance(diffMs / weekMs)) {
+    return "This range is not a full weekly block. Billing rounds up to the next full week.";
+  }
+
+  if (rateType === "monthly") {
+    const monthsBase =
+      (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      (end.getUTCMonth() - start.getUTCMonth());
+    const anchor = new Date(start.getTime());
+    anchor.setUTCMonth(anchor.getUTCMonth() + monthsBase);
+    if (monthsBase < 1 || anchor.getTime() !== endMs) {
+      return "This range is not a full monthly block. Billing rounds up to the next full month.";
+    }
+  }
+
+  return null;
+}
+
+function getCalendarRangeAlignmentWarning(
+  from: Date,
+  to: Date,
+  rateType: ListingDetails["rate_type"],
+) {
+  const start = startOfDay(from);
+  const end = startOfDay(to);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return null;
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const selectedDays = Math.floor((endMs - startMs) / dayMs) + 1;
+
+  if (rateType === "weekly" && selectedDays % 7 !== 0) {
+    return "This range is not a full weekly block. Billing rounds up to the next full week.";
+  }
+
+  if (rateType === "monthly") {
+    const endExclusive = addDays(end, 1);
+    const monthsBase =
+      (endExclusive.getFullYear() - start.getFullYear()) * 12 +
+      (endExclusive.getMonth() - start.getMonth());
+    const anchor = new Date(start.getTime());
+    anchor.setMonth(anchor.getMonth() + monthsBase);
+    if (monthsBase < 1 || anchor.getTime() !== endExclusive.getTime()) {
+      return "This range is not a full monthly block. Billing rounds up to the next full month.";
+    }
+  }
+
+  return null;
+}
+
 export default function ListingPage() {
   const params = useParams<{ id: string | string[] }>();
   const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -134,11 +211,32 @@ export default function ListingPage() {
   const [mapError, setMapError] = useState<string | null>(null);
   const buyNowCardRef = React.useRef<HTMLDivElement | null>(null);
 
+  const effectiveBookingWindow = React.useMemo(() => {
+    if (!listing?.rate_type) return null;
+
+    // Match checkout behavior for non-hourly billing: date range drives charge units.
+    if (listing.rate_type !== "hourly") {
+      if (!buyRange?.from || !buyRange?.to) return null;
+      return {
+        start: startOfDay(buyRange.from),
+        end: startOfDay(buyRange.to),
+      };
+    }
+
+    if (!buyStart || !buyEnd) return null;
+    return {
+      start: new Date(buyStart),
+      end: new Date(buyEnd),
+    };
+  }, [buyEnd, buyRange?.from, buyRange?.to, buyStart, listing?.rate_type]);
+
   const buyNowAvailability = React.useMemo(() => {
-    if (!listing || !listing.rate_type || !buyStart || !buyEnd) return null;
-    const start = new Date(buyStart);
-    const end = new Date(buyEnd);
-    const durationUnits = computeDurationUnits(start, end, listing.rate_type);
+    if (!listing || !listing.rate_type || !effectiveBookingWindow) return null;
+    const durationUnits = computeDurationUnits(
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
+      listing.rate_type,
+    );
     if (!durationUnits) {
       return {
         status: "invalid" as const,
@@ -161,7 +259,55 @@ export default function ListingPage() {
       status: "ok" as const,
       message: "Listing appears available for these dates.",
     };
-  }, [listing, buyStart, buyEnd]);
+  }, [effectiveBookingWindow, listing]);
+
+  const buyNowPricingEstimate = React.useMemo(() => {
+    if (
+      !listing?.rate_type ||
+      listing.rate_amount == null ||
+      !effectiveBookingWindow
+    ) {
+      return null;
+    }
+    const durationUnits = computeDurationUnits(
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
+      listing.rate_type,
+    );
+    if (!durationUnits) return null;
+
+    const subtotal = listing.rate_amount * durationUnits;
+    const platformFee = subtotal * (PLATFORM_FEE_PERCENT / 100);
+    const total = subtotal + platformFee;
+
+    return {
+      durationUnits,
+      subtotal,
+      platformFee,
+      total,
+    };
+  }, [effectiveBookingWindow, listing?.rate_amount, listing?.rate_type]);
+
+  const billingAlignmentWarning = React.useMemo(() => {
+    if (!listing?.rate_type) return null;
+    if (
+      listing.rate_type !== "hourly" &&
+      buyRange?.from &&
+      buyRange?.to
+    ) {
+      return getCalendarRangeAlignmentWarning(
+        buyRange.from,
+        buyRange.to,
+        listing.rate_type,
+      );
+    }
+    if (!effectiveBookingWindow) return null;
+    return getBillingAlignmentWarning(
+      effectiveBookingWindow.start,
+      effectiveBookingWindow.end,
+      listing.rate_type,
+    );
+  }, [buyRange?.from, buyRange?.to, effectiveBookingWindow, listing?.rate_type]);
 
   const { isLoaded: mapsLoaded } = useGoogleMapsLoader();
 
@@ -976,10 +1122,10 @@ export default function ListingPage() {
                           />
                         </label>
                       </div>
-                      {listing.rate_type && buyStart && buyEnd && (() => {
+                      {listing.rate_type && effectiveBookingWindow && (() => {
                         const durationUnits = computeDurationUnits(
-                          new Date(buyStart),
-                          new Date(buyEnd),
+                          effectiveBookingWindow.start,
+                          effectiveBookingWindow.end,
                           listing.rate_type,
                         );
                         if (!durationUnits) return null;
@@ -1001,6 +1147,45 @@ export default function ListingPage() {
                           {buyNowAvailability.message}
                         </p>
                       )}
+                      {billingAlignmentWarning && (
+                        <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                          {billingAlignmentWarning}
+                        </p>
+                      )}
+                      {buyNowPricingEstimate && (
+                        <div className="mt-2 rounded-md border border-slate-200 bg-white p-2.5 text-[11px] text-slate-700 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span>
+                              Base price (
+                              {buyNowPricingEstimate.durationUnits} {listing.rate_type}
+                              {" "}x {formatMoney(listing.rate_amount)})
+                            </span>
+                            <span className="font-medium">
+                              {formatMoney(buyNowPricingEstimate.subtotal)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Platform fee ({PLATFORM_FEE_PERCENT}%)</span>
+                            <span className="font-medium">
+                              {formatMoney(buyNowPricingEstimate.platformFee)}
+                            </span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-1 flex items-center justify-between text-slate-900">
+                            <span className="font-semibold">Estimated total due now</span>
+                            <span className="font-semibold">
+                              {formatMoney(buyNowPricingEstimate.total)}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed">
+                            Transparency note: This is an estimate based on listed rates.
+                            Final charges may vary at checkout based on taxes or other applicable fees.
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Need different terms? You can message the landlord to negotiate
+                        pricing and duration ranges before checkout.
+                      </p>
                     </div>
                     <button
                       className="mt-3 w-full bg-emerald-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"

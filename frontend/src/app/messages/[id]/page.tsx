@@ -332,6 +332,22 @@ export default function ConversationPage() {
     });
   }
 
+  /** Listing-style rate is stored in major units (e.g. USD), not cents. */
+  function formatRateMajor(amount: number, currency: string | undefined) {
+    return amount.toLocaleString(undefined, {
+      style: "currency",
+      currency: (currency || "usd").toUpperCase(),
+      maximumFractionDigits: 0,
+    });
+  }
+
+  function offerPlatformFeePercent(offer: OfferModel): number | null {
+    const sub = offer.subtotal_amount;
+    const fee = offer.platform_fee_amount;
+    if (sub == null || fee == null || sub <= 0 || fee < 0) return null;
+    return Math.round((fee / sub) * 100);
+  }
+
   function formatStatusLabel(status: string | undefined) {
     if (!status) return "Unknown";
     return status
@@ -339,6 +355,10 @@ export default function ConversationPage() {
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
   }
+
+  const latestOfferPlatformFeePct = latestOffer
+    ? offerPlatformFeePercent(latestOffer)
+    : null;
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans">
@@ -434,7 +454,7 @@ export default function ConversationPage() {
                           Offer
                         </p>
                         <p className="text-sm font-semibold text-slate-900">
-                          {latestOffer.rate_amount} {latestOffer.currency?.toUpperCase() ?? "USD"}/
+                          {formatRateMajor(latestOffer.rate_amount, latestOffer.currency)}/
                           {latestOffer.rate_type}
                         </p>
                       </div>
@@ -451,9 +471,39 @@ export default function ConversationPage() {
                     <p className="text-xs text-slate-600">
                       Duration: {latestOffer.duration} {latestOffer.rate_type}
                     </p>
-                    <p className="mt-1 text-xs font-medium text-slate-900">
-                      Total: {formatMoney(latestOffer.total_amount, latestOffer.currency)}
-                    </p>
+                    <div className="mt-2 space-y-1 rounded-md border border-slate-100 bg-slate-50/90 px-2.5 py-2 text-[11px] text-slate-700">
+                      <div className="flex items-start justify-between gap-2">
+                        <span>
+                          Base price (
+                          {latestOffer.duration} {latestOffer.rate_type} ×{" "}
+                          {formatRateMajor(latestOffer.rate_amount, latestOffer.currency)})
+                        </span>
+                        <span className="shrink-0 font-medium tabular-nums">
+                          {formatMoney(latestOffer.subtotal_amount, latestOffer.currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>
+                          Platform fee
+                          {latestOfferPlatformFeePct != null
+                            ? ` (${latestOfferPlatformFeePct}%)`
+                            : ""}
+                        </span>
+                        <span className="font-medium tabular-nums">
+                          {formatMoney(latestOffer.platform_fee_amount, latestOffer.currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-1 text-slate-900">
+                        <span className="font-semibold">Total due</span>
+                        <span className="font-semibold tabular-nums">
+                          {formatMoney(latestOffer.total_amount, latestOffer.currency)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
+                        This breakdown reflects this offer. Final charges at payment may include
+                        taxes or processor fees shown by checkout.
+                      </p>
+                    </div>
                     {latestOffer.notes && (
                       <p className="mt-1 text-xs text-slate-600">Note: {latestOffer.notes}</p>
                     )}

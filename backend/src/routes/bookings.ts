@@ -346,6 +346,26 @@ router.post<
       }
     }
 
+    // Returning from Stripe Checkout without paying leaves `pending_payment` rows that still
+    // participate in overlap checks. Clear this renter's unfinished attempts before validating dates.
+    const abandonedAt = new Date().toISOString();
+    const { error: abandonClearError } = await supabaseAdmin
+      .from('bookings')
+      .update({
+        status: 'cancelled',
+        cancelled_at: abandonedAt,
+        cancellation_reason: 'Checkout not completed (new booking attempt)',
+      } as Partial<BookingRow>)
+      .eq('listing_id', listing.id)
+      .eq('renter_id', userId)
+      .eq('status', 'pending_payment');
+
+    if (abandonClearError) {
+      logBookingsApi('POST', '/api/bookings/buy-now', userId, false, abandonClearError.message);
+      res.status(500).json({ success: false, error: 'Failed to validate listing availability' });
+      return;
+    }
+
     const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
     const { data: existingBookings, error: existingError } = await supabaseAdmin
       .from('bookings')

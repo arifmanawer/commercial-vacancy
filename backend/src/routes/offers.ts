@@ -996,6 +996,26 @@ router.post<
       return;
     }
 
+    // Same as buy-now: an unfinished Checkout session leaves `pending_payment` bookings that block
+    // overlap and trigger "already has a booking" on retry. Drop abandoned attempts for this renter.
+    const abandonedAt = new Date().toISOString();
+    const { error: abandonClearError } = await supabaseAdmin
+      .from('bookings')
+      .update({
+        status: 'cancelled',
+        cancelled_at: abandonedAt,
+        cancellation_reason: 'Checkout not completed (new accept attempt)',
+      } as Partial<BookingRow>)
+      .eq('listing_id', o.listing_id)
+      .eq('renter_id', o.renter_id)
+      .eq('status', 'pending_payment');
+
+    if (abandonClearError) {
+      logOffersApi('POST', '/api/offers/:id/accept', userId, false, abandonClearError.message);
+      res.status(500).json({ success: false, error: 'Failed to validate existing bookings' });
+      return;
+    }
+
     const activeStatuses: BookingStatus[] = ['pending_payment', 'reserved', 'active'];
 
     const { data: existingBookings, error: existingBookingsError } = await supabaseAdmin

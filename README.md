@@ -1,22 +1,40 @@
 # commercial-vacancy
 
-A web platform that connects vacant commercial spaces in NYC with renters, event hosts, landlords, and contractors. Built with Next.js, Supabase, and NYC Open Data.
+**Smart Vacancy Reuse Platform** — a civic web app that helps identify and repurpose vacant or underused properties in New York City. It connects renters, landlords, and contractors in one place, combining user-submitted listings with NYC open datasets (zoning, transit, vacancy) and Google Maps to support short- and long-term reuse of commercial space.
 
-## Preview
-
-**Home**
-
-<img width="1352" height="1458" alt="Homepage — Find Your Perfect Space" src="https://github.com/user-attachments/assets/8df69f7d-d26b-4100-8e38-a3f2b3f71f3d" />
-
-**Features**
-
-<img width="1352" height="1458" alt="Rent a space or host an event" src="https://github.com/user-attachments/assets/3add4b58-4d19-430c-9bc8-67330f2cc75b" />
+Built with Next.js, Node.js/Express, Supabase, and Stripe.
 
 ## Running with Docker
 
 Run the entire application (frontend + backend) with a single command. Requires only **Docker** and **Git**—no Node.js or npm needed.
 
-**Supabase:** Copy `.env.example` to `.env` and add your Supabase URL, anon key, and service role key. Never commit `.env`. Run the SQL migrations in Supabase Dashboard → SQL Editor, in order: `001_profiles.sql`, `002_landlord_roles_and_listings.sql`, `003_contractors.sql`, `004_add_is_contractor.sql`.
+**Environment:** Create a `.env` file at the repo root with your Supabase URL, anon key, and service role key, plus Stripe and Google Maps keys. Never commit `.env`. Then run the SQL migrations in `supabase/migrations/` from the Supabase Dashboard → SQL Editor, in numeric order (`001_profiles.sql` through `013_booking_reserved_email_sent.sql`).
+
+### Required environment variables
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# Google Maps / Places
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...
+
+# Stripe (Checkout + Connect)
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=...
+
+# Gemini (AI assistant) — optional
+GEMINI_API_KEY=...
+
+# Resend (transactional email) — optional
+RESEND_API_KEY=...
+
+# Frontend → backend wiring
+NEXT_PUBLIC_API_URL=http://localhost:5001
+```
 
 ### Start the application
 
@@ -25,7 +43,7 @@ docker compose up --build
 ```
 
 - **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
+- **Backend API**: http://localhost:5001
 
 ### Stop the application
 
@@ -37,8 +55,8 @@ Hot reload is enabled for both services—edit the code and changes will apply a
 
 ## Local development (without Docker)
 
-1. Copy `.env.example` to `.env` at the repo root and add your Supabase keys.
-2. For the frontend to load `.env`, create a symlink:
+1. Create a `.env` at the repo root with the variables listed above.
+2. For the frontend to load `.env`, create a symlink (or use `frontend/.env.local`):
    ```bash
    ln -sf ../.env frontend/.env
    ```
@@ -47,8 +65,8 @@ Hot reload is enabled for both services—edit the code and changes will apply a
    pkill -f "next dev"
    rm -f frontend/.next/dev/lock
    ```
-4. Start backend: `cd backend && npm run dev`
-5. Start frontend: `cd frontend && npm run dev`
+4. Start backend: `cd backend && npm install && npm run dev`  (defaults to `PORT=3001` unless overridden; set `PORT=5001` to match the Docker setup and `NEXT_PUBLIC_API_URL`)
+5. Start frontend: `cd frontend && npm install && npm run dev`
 
 ## Troubleshooting: Next.js stuck on "Starting"
 
@@ -74,105 +92,114 @@ npm run dev
 ---
 
 # Project Scope
-## Overview
-This project is a web-based property management platform designed to streamline communication and task handling between renters, landlords, and contractors. The system provides role-based access, allowing each user type to interact with features specific to their responsibilities while maintaining a clear and efficient workflow.
 
-The primary goal of the project is to create a functional and realistic Minimum Viable Product (MVP) that solves an NYC specific problem of how to make effective and practical use of vacant commercial buildings. In addition, demonstrating full-stack development concepts, including frontend interfaces, backend logic, and database design.
+## Overview
+
+The Smart Vacancy Reuse Platform is a civic-tech web application that helps identify and repurpose vacant or underused commercial and mixed-use properties in New York City. It combines user-submitted listings with structured NYC open datasets to give renters, landlords, and contractors a single place to discover opportunities, evaluate locations, and connect with one another.
+
+By analyzing zoning constraints, transit access, amenities, and neighborhood context, the platform generates practical reuse insights and supports both short-term (pop-ups, workshops, events) and long-term rental scenarios. The goal is to reduce vacancy duration, improve community use of space, and streamline the reuse process for everyone involved.
 
 ## Objectives
-* Provide a centralized platform for managing rental properties and maintenance requests
-* Support multiple user roles with distinct permissions and dashboards
-* Simplify maintenance request submission, tracking, and assignment to contractors
-* Demonstrate practical software engineering practices such as modular design and version control
+
+* Provide a centralized marketplace for listing, discovering, and booking vacant commercial spaces
+* Support three distinct user roles with dedicated dashboards and workflows
+* Enrich every listing with NYC open data (zoning, transit, neighborhood vacancy)
+* Enable end-to-end negotiation and secure booking with Stripe payments
+* Give landlords easy access to contractors who can prepare spaces for reuse
 
 ## User Roles
-* Renter
-  * Registers and logs into the system
-  * Views assigned rental property information
-  * Submits maintenance/service requests
-  * Views the status of submitted requests
-* Landlord
-  * Registers and logs into the system
-  * Creates and manages property listings
-  * Views maintenance/service requests for owned properties
-  * Assigns requests to contractors
-* Contractor
-  * Registers and logs into the system
-  * Creates and manages a contractor profile
-  * Views assigned jobs
-  * Updates job status
+
+* **Renter / Event Host**
+  * Registers and logs in
+  * Browses listings on a list view or map view
+  * Reads listing detail pages enriched with city-data insights
+  * Sends inquiries, negotiates offers, and books spaces via Stripe Checkout
+  * Tracks reservations and conversations from a dashboard
+* **Landlord**
+  * Publishes property listings through a guided flow (with imported NYC data where available)
+  * Manages images, pricing, and availability
+  * Responds to inquiries, counters offers, and accepts bookings
+  * Onboards to Stripe Connect to receive payouts
+  * Posts contractor job requests
+* **Contractor**
+  * Creates a public service profile (services, rates, service radius, availability)
+  * Receives, accepts, declines, and completes job requests from landlords
+  * Tracks job status from a dedicated dashboard
 
 ## Core Features (MVP)
-* Authentication and Authorization
-  * User sign-up and sign-in
-  * Secure password handling
-  * Role-based access control
-* Property Management
-  * Landlords can add, edit, and view properties
-  * Properties are associated with renters and maintenance requests
-* Service Request Workflow
-  * Renters submit service requests
-  * Landlords review and assign requests
-  * Contractors update job progress and completion status
-* Dashboards
-  * Role-specific dashboards for renters, landlords, and contractors
-  * Centralized view of relevant actions and data for each role
 
-## Stretch Features
-* File uploads for maintenance request images
-* Searching and filtering for contractors
-* Email notifications for status updates
-* Integration of city or public data for property information
+* **Authentication & Authorization** — Supabase Auth, role flags on profile, RLS-aware data access
+* **Listings & Discovery** — guided listing creation, image uploads, list/map browse, listing detail pages
+* **City-Data Insights** — zoning/land-use context, MTA transit proximity, neighborhood vacancy context, Google Maps/Places integration
+* **Inquiries & Messaging** — conversation threads between renters, landlords, and contractors
+* **Offers & Negotiation** — offer creation, counter-offers, acceptance/rejection, status transitions
+* **Bookings & Payments** — Stripe Checkout, Stripe Connect payouts, webhooks, refunds, PDF rental agreements
+* **Contractor Marketplace** — contractor profiles, job requests, accept/decline/complete flow
+* **Role-Specific Dashboards** — separate dashboards for renters, landlords, and contractors
+* **AI Assistant** — Gemini-powered helper for surfacing listings and answering platform questions (rate-limited)
+* **Transactional Email** — booking confirmation and reservation notifications via Resend
+* **Saved Listings & Reviews** — favorites for renters, bidirectional reviews for trust/reputation
 
-## Assumptions and Constraints
-* The system will be developed as a web application
-* Users access the platform through a modern web browser
-* The project timeline is limited to the academic semester
+## Future Work
 
-## Success Criteria
-* All three user roles can authenticate and access their dashboards
-* Core workflows function correctly end-to-end
-* Data is stored and retrieved securely from the database
-* The application is stable, usable, and well-documented
+* Stronger adaptive reuse recommendation scoring and ranking models
+* Expanded civic data coverage and automated zoning/policy change alerts
+* Smarter contractor matching based on historical outcomes and SLA preferences
+* Calendar synchronization for tours, bookings, and contractor scheduling
+* Mobile-first optimization, accessibility expansion, and multilingual support
+* Advanced marketplace analytics (vacancy duration, conversion rates, neighborhood demand)
 
 ## Data Flow
 
-### Property Search
-1. User searches for available properties
-1. Platform retrieves listings from property database
-1. Nearby services and transit data retrieved from APIs
-1. Results displayed to user
+### Property search & booking
+1. Renter searches/filters listings or browses the map view
+2. Platform retrieves listings from Supabase and enriches them with NYC Open Data + MTA transit + Google Places
+3. Renter inquires, negotiates an offer, then books via Stripe Checkout
+4. On `payment_intent.succeeded` webhook, booking is confirmed and confirmation emails are sent
 
-### Property Listing
-1. Landlord submits property listing
-1. Listing is validated and stored in database
-1. Confirmation returned to landlord
+### Property listing
+1. Landlord submits a listing through the guided flow
+2. Optional import from NYC datasets; otherwise custom fields
+3. Listing is validated, persisted, and indexed for browse/map
 
-### Order & Payment Processing
-1. Renter submits payment information
-1. Payment system processes transaction
-1. Order confirmation returned to renter and landlord
+### Contractor job
+1. Landlord posts a job request to a contractor profile
+2. Contractor accepts, declines, or proposes terms
+3. Status updates are tracked in both dashboards through to completion
 
 ## Tech Stack
 
 ### Frontend
-* Next.js
-* React.js
-* Tailwind CSS
+* Next.js 16 (App Router)
+* React 19, TypeScript
+* Tailwind CSS v4
+* `@react-google-maps/api` for the map view
 
 ### Backend
-* Laravel
-* Node.js
-* Express.js
+* Node.js + Express + TypeScript
+* Supabase JS SDK
+* Stripe (Checkout + Connect + webhooks)
+* PDFKit for rental agreement generation
+* Resend for transactional email
+* Gemini for the AI assistant
 
-### Database
-* Supabase - PostgreSQL
+### Database / Auth
+* Supabase (PostgreSQL, Auth, Storage, RPC functions)
+* Schema in 3NF — see `supabase/migrations/`
 
-### Data Sources
-* NYC Open Data
-* Google Maps API
-* Location Insights API
+### Data Sources / APIs
+* NYC Open Data (zoning, storefront vacancy)
+* NY Open Data — MTA station data
+* Google Maps / Places API
 
-### Deployment
-*  Vercel
-*  Render
+### DevOps
+* Docker Compose for full-stack local development
+* Containerized backend and frontend with hot reload
+
+## Team
+
+* Arif Manawer
+* Ahmed Hamouda
+* Muhammad Ahmed
+* Mohammad Kabir
+* Abdul Muswara

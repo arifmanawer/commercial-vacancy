@@ -31,9 +31,6 @@ GEMINI_API_KEY=...
 
 # Resend (transactional email) — optional
 RESEND_API_KEY=...
-
-# Frontend → backend wiring
-NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
 ### Start the application

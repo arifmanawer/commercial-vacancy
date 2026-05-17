@@ -1,5 +1,17 @@
 # commercial-vacancy
 
+A web platform that connects vacant commercial spaces in NYC with renters, event hosts, landlords, and contractors. Built with Next.js, Supabase, and NYC Open Data.
+
+## Preview
+
+**Home**
+
+<img width="1352" height="1458" alt="Homepage — Find Your Perfect Space" src="https://github.com/user-attachments/assets/8df69f7d-d26b-4100-8e38-a3f2b3f71f3d" />
+
+**Features**
+
+<img width="1352" height="1458" alt="Rent a space or host an event" src="https://github.com/user-attachments/assets/3add4b58-4d19-430c-9bc8-67330f2cc75b" />
+
 ## Running with Docker
 
 Run the entire application (frontend + backend) with a single command. Requires only **Docker** and **Git**—no Node.js or npm needed.
